@@ -57,9 +57,6 @@ class DND():
             self.mem_input_dim = exp_settings['num_arms'] + exp_settings['barcode_size']
         elif self.mem_store == 'context':
             self.mem_input_dim = exp_settings['barcode_size']
-
-        # These two won't work for barcode tasks without figuring out a way to get the barcode
-        # Cheat and get it from the input?
         elif self.mem_store == 'obs':
             self.mem_input_dim = exp_settings['num_arms']
         elif self.mem_store == 'hidden':
@@ -119,8 +116,8 @@ class DND():
         # Save every embedding of the trial
         self.trial_buffer.pop(0)
         keys = self.trial_buffer
-        self.trial_hidden_states = [keys[-1]]
-        # self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != () and i > len(keys)//4]
+        # self.trial_hidden_states = [keys[-1]]
+        self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != () and i > len(keys)//4]
 
         # Append new memories at head of list to allow sim search to find these first
         for embedding, real_bc, _, predicted_bc in self.trial_hidden_states:
@@ -194,8 +191,7 @@ class DND():
         
         # If nothing is stored in memory yet, return 0's
         else:
-            self.trial_buffer.append(
-                (embedding, real_label_as_string, emb_loss, predicted_context))
+            self.trial_buffer.append((embedding, real_label_as_string, emb_loss, predicted_context))
             return _empty_memory(self.hidden_lstm_dim, device=self.device), _empty_barcode(self.exp_settings['barcode_size']), torch.tensor(0, device = self.device)
         
         # Store embedding and predicted class label memory index in trial_buffer

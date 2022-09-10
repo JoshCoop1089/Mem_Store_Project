@@ -15,9 +15,9 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 # Experiment Type and Length
 #context, embedding, hidden, L2RL
 
-exp_types = ['context', 'embedding']#, 'hidden', 'L2RL']
-training_epochs = 1000
-noise_epochs = 100
+exp_types = ['context', 'embedding', 'hidden', 'L2RL']
+training_epochs = 2000
+noise_epochs = 200
 noise_train_percent = 0
 
 # Experiment Difficulty
