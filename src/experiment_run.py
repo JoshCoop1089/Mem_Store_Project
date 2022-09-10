@@ -32,7 +32,7 @@ pulls_per_episode = 10
 num_repeats = 1
 
 # Modify this to fit your machines save paths
-figure_save_location = "..\\Memory-Storage-Ritter\\ICLR_Code\\figs\\"
+figure_save_location = "..\\Mem_Store_Project\\figs\\"
 ###### NO MORE CHANGES!!!!!!!! ##########
 
 exp_base = exp_types, training_epochs, noise_epochs, noise_train_percent, num_repeats, figure_save_location
@@ -46,14 +46,10 @@ Tests to run:
 2a4b, 2a8b, 4a8b, 4a12b, 6a12b
 size 16, 24, 32
 
-
 Barcode Number
 Arm Number
 Barcode Size
 Baseline vs 1 Hamming Cluster
 
 Train with noise?
-
-
-
 """
