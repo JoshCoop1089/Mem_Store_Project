@@ -39,8 +39,11 @@ def run_experiment_sl(exp_settings):
     task_version: string (bandit or original QiHong task)
     """
     # Tensorboard viewing
+    exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
+    exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n {exp_settings['mem_store']}"
+    exp_name = exp_size+exp_other
     if exp_settings['tensorboard_logging']:
-        tb = SummaryWriter()
+        tb = SummaryWriter(log_dir=f"runs/{exp_name}")
 
     # See Experimental parameters for GPU vs CPU choices
     if exp_settings['torch_device'] == 'CPU':
@@ -203,7 +206,7 @@ def run_experiment_sl(exp_settings):
                                         mem_key, barcode_id[m],
                                         h_t, c_t)
                 a_t, assumed_barcode_string, prob_a_t, v_t, entropy, h_t, c_t = output_t
-                # sim_score = cache[-1]
+                f_t, i_t, o_t, r_gate, m_t, sim_score = cache
                 # epoch_sim_log[t+m*pulls_per_episode] += sim_score/n_epochs
 
                 # Always use ground truth bc for reward eval
@@ -234,6 +237,9 @@ def run_experiment_sl(exp_settings):
 
                 # Create next input to feed back into LSTM
                 last_action_output = torch.cat((one_hot_action, next_bc, r_t.view(1,1)), dim = 1)
+
+                if exp_settings['tensorboard_logging'] and i == exp_settings['epochs']-1:
+                    tb.add_histogram('R-Gate Weights Train Final Epoch', r_gate, t+m*pulls_per_episode)
 
             # LSTM/A2C Loss for Episode
             returns = compute_returns(rewards, device, gamma = 0.0)
@@ -293,16 +299,14 @@ def run_experiment_sl(exp_settings):
             log_loss_total[i] += torch.div(loss, episodes_per_epoch)
 
         # Tensorboard Stuff
-        if exp_settings['tensorboard_logging'] and i%5 == 4:
-            tb.add_scalar("LSTM Loss_All", log_loss_total[i], i)
-            tb.add_scalar("LSTM Loss_Policy", log_loss_policy[i], i)
-            tb.add_scalar("LSTM Loss_Value", log_loss_value[i], i)
+        if exp_settings['tensorboard_logging']: 
             tb.add_scalar("LSTM Returns", log_return[i], i)
-            if exp_settings['mem_store'] == 'embedding':
-                tb.add_scalar("Embedder Loss",
-                            agent.dnd.embedder_loss[i], i)
-                tb.add_scalar("Accuracy Embedder Model",
+            tb.add_scalar("Mem Retrieval Accuracy",
                                 log_embedder_accuracy[i], i)
+            if i < exp_settings['epochs']:
+                tb.add_histogram('R-Gate Weights Train Epochs', r_gate, i)
+            else:
+                tb.add_histogram('R-Gate Weights Noise Epochs', r_gate, i)
 
         run_time[i] = time.perf_counter() - time_start
 
@@ -423,31 +427,32 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings['epochs'] = 0
 
     # Task Complexity
-    exp_settings['noise_percent'] = [0.125, 0.25, 0.5, 0.75]    #What noise percent to apply during eval phase
+    exp_settings['noise_percent'] = [0.125, 0.25, 0.5, 0.75, 0.875]    #What noise percent to apply during eval phase
     exp_settings['noise_eval_epochs'] = 0               # How long to spend on a single noise percent eval
     exp_settings['noise_train_percent'] = 0             # What noise percent to apply during training, if any
     exp_settings['sim_threshold'] = 0                   # Cosine similarity threshold for single clustering
     exp_settings['hamming_threshold'] = 0               # Hamming distance for multi clustering
 
     # Data Logging
-    exp_settings['tensorboard_logging'] = False
     ### End of Experimental Parameters ###
 
     # Forced Hyperparams (found after multiple passes through Bayesian Optimization)
+    # 6a12b24s 0.65 plateau after 500 epochs w/ 90% accuracy
     exp_settings['torch_device'] = 'GPU'
     exp_settings['dim_hidden_a2c'] = int(2**8.644)          #400
     exp_settings['dim_hidden_lstm'] = int(2**8.655)         #403
-    exp_settings['entropy_error_coef'] = 0.0391
     exp_settings['lstm_learning_rate'] = 10**-3.332         #4.66e-4
-    exp_settings['value_error_coef'] = 0.62
     exp_settings['embedding_size'] = int(2**8.629)          #395
     exp_settings['embedder_learning_rate'] = 10**-3.0399    #9.1e-4
+    exp_settings['entropy_error_coef'] = 0.0391
+    exp_settings['value_error_coef'] = 0.62
 
     # Experimental Variables
     mem_store_types, exp_settings['epochs'], exp_settings['noise_eval_epochs'], exp_settings['noise_train_percent'], num_repeats, file_loc = exp_base
     exp_settings['hamming_threshold'], exp_settings['num_arms'], exp_settings['num_barcodes'], exp_settings[
         'barcode_size'], exp_settings['pulls_per_episode'], exp_settings['sim_threshold'] = exp_difficulty
 
+    exp_settings['tensorboard_logging'] = (num_repeats == 1 and exp_settings['epochs'] >= 200)
     # Safety Assertions
     assert exp_settings['epochs'] >= 10, "Training epochs must be greater than 10"
     assert exp_settings['pulls_per_episode'] >= 2, "Pulls per episode must be greater than 2"
@@ -456,7 +461,8 @@ def run_experiment(exp_base, exp_difficulty):
 
     ### Beginning of Experimental Runs ###
     f, axes = plt.subplots(1, 1, figsize=(8, 6))
-    f1, axs = plt.subplots(1, 2, figsize=(16, 6))
+    f1, axs = plt.subplots(1, 1, figsize=(8, 6))
+    # f2, axs2 = plt.subplots(1, 1, figsize=(8, 6))
 
     # Prevent graph subscripting bug if running test on only one mem_store type
     num_tsne = len(mem_store_types) if len(mem_store_types) > 2 else 2
@@ -474,8 +480,6 @@ def run_experiment(exp_base, exp_difficulty):
             log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
             keys, prediction_mapping, epoch_mapping = key_data 
             tot_rets += log_return/num_repeats
-            # print(tot_rets)
-
 
         # LOWESS Smoothed Graphs
         frac = 0.05
@@ -485,9 +489,9 @@ def run_experiment(exp_base, exp_difficulty):
 
         if mem_store != 'L2RL':
             lowess_acc = lowess(log_embedder_accuracy, in_array, frac = frac, return_sorted=False)
-            axs[0].plot(lowess_acc, label=f"Mem: {mem_store.capitalize()}")
+            axs.plot(lowess_acc, label=f"Mem: {mem_store.capitalize()}")
 
-            # axs[1].scatter(range(len(epoch_sim_logs)), epoch_sim_logs,
+            # axs2.scatter(range(len(epoch_sim_logs)), epoch_sim_logs,
             #                label=f"Mem: {mem_store.capitalize()}")
 
         # # Rolling Window Smoothed Graphs
@@ -533,16 +537,17 @@ def run_experiment(exp_base, exp_difficulty):
 
     graph_title = f""" --- Returns averaged over {num_repeats} runs ---
     Arms: {exp_settings['num_arms']} | Unique Barcodes: {exp_settings['num_barcodes']} | Barcode Dim: {exp_settings['barcode_size']}
-    LOWESS Fraction: {frac} | Clusters: {int(exp_settings['num_barcodes']/exp_settings['num_arms'])}
+    LOWESS: {frac} | Noise Trained: {int(exp_settings['barcode_size']*exp_settings['noise_train_percent'])} bits | Clusters: {int(exp_settings['num_barcodes']/exp_settings['num_arms'])}
     {cluster_info}
     """
 
     # Noise Partitions
-    colors = ['g', 'r', 'c', 'm']
+    prop_cycle = plt.rcParams['axes.prop_cycle']
+    colors = prop_cycle.by_key()['color']
     for idx, noise_percent in enumerate(exp_settings['noise_percent']):
-        axes.axvline(x=exp_settings['epochs'] + idx*exp_settings['noise_eval_epochs'], color=colors[idx], linestyle = 'dashed',
+        axes.axvline(x=exp_settings['epochs'] + idx*exp_settings['noise_eval_epochs'], color = colors[idx], linestyle = 'dashed',
             label = f"{int(exp_settings['barcode_size']*noise_percent)} Bits Noisy")
-        axs[0].axvline(x=exp_settings['epochs'] + idx*exp_settings['noise_eval_epochs'], color=colors[idx], linestyle='dashed',
+        axs.axvline(x=exp_settings['epochs'] + idx*exp_settings['noise_eval_epochs'], color = colors[idx], linestyle = 'dashed',
             label = f"{int(exp_settings['barcode_size']*noise_percent)} Bits Noisy")
 
     sns.despine()
@@ -557,18 +562,20 @@ def run_experiment(exp_base, exp_difficulty):
     f.suptitle(graph_title)
 
     # Accuracy
-    axs[0].set_ylabel('Accuracy')
-    axs[0].set_xlabel('Epoch')
-    axs[0].set_title('Barcode Prediction Accuracy from Memory Retrievals')
-    axs[0].axhline(y=1/exp_settings['num_barcodes'], color='b', linestyle='dashed', label = 'Random Choice')
-    axs[1].set_xlabel('Pull Number')
-    axs[1].set_ylabel('Avg Similarity of Best Memory')
-
-    axs[0].legend(bbox_to_anchor=(0, -0.2, 1, 0), loc="upper left",
-            mode="expand", borderaxespad=0, ncol=2)
-    axs[1].legend(bbox_to_anchor=(0, -0.2, 1, 0), loc="upper left",
+    axs.set_ylabel('Accuracy')
+    axs.set_xlabel('Epoch')
+    axs.set_title('Barcode Prediction Accuracy from Memory Retrievals')
+    axs.axhline(y=1/exp_settings['num_barcodes'], color='b', linestyle='dashed', label = 'Random Choice')
+    axs.legend(bbox_to_anchor=(0, -0.2, 1, 0), loc="upper left",
             mode="expand", borderaxespad=0, ncol=2)
     f1.tight_layout()
+
+    # # Memory Similarity
+    # axs2.set_xlabel('Pull Number')
+    # axs2.set_ylabel('Avg Similarity of Best Memory')
+    # axs2.legend(bbox_to_anchor=(0, -0.2, 1, 0), loc="upper left",
+    #         mode="expand", borderaxespad=0, ncol=2)
+    # f2.tight_layout()
 
     # T-SNE
     f3.tight_layout()
@@ -579,8 +586,9 @@ def run_experiment(exp_base, exp_difficulty):
     file_loc = file_loc
     exp_id = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s {exp_settings['hamming_threshold']} hamming {exp_settings['noise_train_percent']} noise_trained {num_repeats} run(s) "
     plot_type = ['returns', 'accuracy', 'tsne']
-    for fig_num, figa in enumerate([f, f1, f3]):
-        filename = file_loc + exp_id + plot_type[fig_num] +".png"
-        figa.savefig(filename)
+    if exp_length >= 200:
+        for fig_num, figa in enumerate([f, f1, f3]):
+            filename = file_loc + exp_id + plot_type[fig_num] +".png"
+            figa.savefig(filename)
 
     plt.show()

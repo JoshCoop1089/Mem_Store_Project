@@ -94,12 +94,12 @@ class A2C_linear(nn.Module):
 
     """
 
-    def __init__(self, dim_input, dim_output):
+    def __init__(self, dim_input, dim_output, device):
         super(A2C_linear, self).__init__()
         self.dim_input = dim_input
         self.dim_output = dim_output
-        self.actor = nn.Linear(dim_input, dim_output)
-        self.critic = nn.Linear(dim_input, 1)
+        self.actor = nn.Linear(dim_input, dim_output, device = device)
+        self.critic = nn.Linear(dim_input, 1, device = device)
 
     def forward(self, x, beta = 1):
         """compute action distribution and value estimate, pi(a|s), v(s)
