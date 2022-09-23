@@ -414,6 +414,7 @@ def run_experiment(exp_base, exp_difficulty):
 
     ### Beginning of Experimental Runs ###
     exp_length = exp_settings['epochs']+exp_settings['noise_eval_epochs']*len(exp_settings['noise_percent'])
+    epoch_info = np.array([exp_settings['epochs'], exp_settings['noise_eval_epochs'], exp_settings['noise_percent']], dtpye = object)
     for idx_mem, mem_store in enumerate(mem_store_types):
         tot_rets = np.zeros(exp_length)
         tot_acc = np.zeros(exp_length)
@@ -438,5 +439,5 @@ def run_experiment(exp_base, exp_difficulty):
 
         # Logs will be numpy arrays
         np.savez("..\\Mem_Store_Project\\data\\"+exp_name,
-                 tot_rets=tot_rets, tot_acc=tot_acc, epoch_mapping = epoch_mapping)
+                 tot_rets=tot_rets, tot_acc=tot_acc, epoch_mapping = epoch_mapping, epoch_info = epoch_info)
     ### End of Experiment Data   

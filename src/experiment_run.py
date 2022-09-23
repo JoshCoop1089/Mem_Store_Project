@@ -15,7 +15,7 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 ###### Change These!!! ###########
 # Experiment Type and Length
 #context, embedding, hidden, L2RL
-
+#
 exp_types = ['context','embedding', 'hidden', 'L2RL']
 try:
     exp_type = exp_types[int(sys.argv[1])]
@@ -35,7 +35,7 @@ pulls_per_episode = 10
 noise_percent = [0.125, 0.25, 0.5, 0.75, 0.875]
 
 # Randomized seed changes to average for returns graph
-num_repeats = 1
+num_repeats = 3
 
 # Modify this to fit your machines save paths
 figure_save_location = "..\\Mem_Store_Project\\figs\\"
