@@ -1,16 +1,8 @@
 """demo: train a DND LSTM on a contextual choice task
 """
-# Win64bit Optimizations for TSNE
-from statsmodels.nonparametric.smoothers_lowess import lowess
-from sklearnex import patch_sklearn
-patch_sklearn()
-from sklearn.manifold import TSNE
 import time, random
 import torch
 import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-import pandas as pd
 from torch.utils.tensorboard import SummaryWriter
 from task.ContextBandits import ContextualBandit
 from sl_model import DNDLSTM as Agent
@@ -39,11 +31,8 @@ def run_experiment_sl(exp_settings):
     task_version: string (bandit or original QiHong task)
     """
     # Tensorboard viewing
-    exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
-    exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n {exp_settings['mem_store']}"
-    exp_name = exp_size+exp_other
     if exp_settings['tensorboard_logging']:
-        tb = SummaryWriter(log_dir=f"runs/{exp_name}")
+        tb = SummaryWriter(log_dir=f"runs/{exp_settings['exp_name']}")
 
     # See Experimental parameters for GPU vs CPU choices
     if exp_settings['torch_device'] == 'CPU':
@@ -53,6 +42,7 @@ def run_experiment_sl(exp_settings):
             'cuda:0' if torch.cuda.is_available() else 'cpu')
     else:
         raise ValueError("Incorrect Torch Device set")
+    print(f"Device: {device}")
 
     if not exp_settings['randomize']:
         seed_val = 0
@@ -108,12 +98,22 @@ def run_experiment_sl(exp_settings):
     run_time = np.zeros(n_epochs,)
 
     # Results for TB or Graphing
+    log_keys = []
     log_return = np.zeros(n_epochs,)
     log_embedder_accuracy = np.zeros(n_epochs,)
     log_loss_value = np.zeros(n_epochs,)
     log_loss_policy = np.zeros(n_epochs,)
     log_loss_total = np.zeros(n_epochs,)
     epoch_sim_log = np.zeros(episodes_per_epoch*pulls_per_episode,)
+
+    # Save keys during training at 0%, 33%, 66% and 100% of total train time
+    key_save_epochs = [int(x*exp_settings['epochs']//3) for x in range(3)]
+    key_save_epochs.extend([exp_settings['epochs']-1])
+
+    # Save keys at end of different noise epochs
+    noise_epochs = [x*exp_settings['noise_eval_epochs'] + exp_settings['epochs']-1 for x in range(1,len(exp_settings['noise_percent'])+1)]
+    key_save_epochs.extend(noise_epochs)
+
     print("\n", "-*-_-*- "*3, "\n")
     # loop over epoch
     for i in range(n_epochs):
@@ -327,8 +327,9 @@ def run_experiment_sl(exp_settings):
             print(f"Time Elapsed: {round(sum(run_time), 1)} secs")
 
         # Store the keys from the end of the training epochs
-        if i == exp_settings['epochs'] - 1:
+        if i in key_save_epochs:
             keys, prediction_mapping = agent.get_all_mems_embedder()
+            log_keys.append(keys)
     
     # Final Results
     print("- - - "*3)
@@ -340,61 +341,13 @@ def run_experiment_sl(exp_settings):
 
     logs_for_graphs = log_return, log_embedder_accuracy, epoch_sim_log
     loss_logs =  log_loss_value, log_loss_policy, log_loss_total,  agent.dnd.embedder_loss
-    key_data = keys, prediction_mapping, epoch_mapping
+    key_data = log_keys, epoch_mapping
 
     if exp_settings['tensorboard_logging']:
         tb.flush()
         tb.close()
 
     return  logs_for_graphs, loss_logs, key_data
-
-### Graphing Helper Functions ###
-# Theoretical Min/Max Return Performance
-def expected_return(num_arms, perfect_info):
-    if not perfect_info:
-        perfect = 0.9
-        random = 0.9*(1/num_arms) + 0.1*(num_arms-1)/num_arms
-    else:
-        perfect = 1
-        random = 1/num_arms
-    return perfect, random
-
-# Adapted from https://learnopencv.com/t-sne-for-feature-visualization/
-def scale_to_01_range(x):
-    value_range = (np.max(x) - np.min(x))
-    starts_from_zero = x - np.min(x)
-    return starts_from_zero / value_range
-
-def plot_tsne_distribution(keys, labels, mapping, fig, axes, idx_mem):
-    features = np.array([y.cpu().numpy() for y in keys])
-    tsne = TSNE(n_components=2).fit_transform(features)
-    tx = tsne[:, 0]
-    ty = tsne[:, 1]
-    tx = scale_to_01_range(tx)
-    ty = scale_to_01_range(ty)
-
-    # Seperate by barcode
-    classes = {k:[] for k in mapping.keys()}
-    for idx, c_id in enumerate(labels):
-        classes[c_id].append(idx)
-
-    prop_cycle = plt.rcParams['axes.prop_cycle']
-    colors = prop_cycle.by_key()['color']
-    marker_list = ['x', '1', 'o', 'D', '*', 'p', 'X', 'h', '8', '2', 'v', '.', '^','3', '<', 'd', '>', '4', '+', 's']
-    
-    # Map each barcode as a seperate layer on the same scatterplot
-    for m_id, (c_id, indices) in enumerate(classes.items()):
-        # extract the coordinates of the points of this class only
-        current_tx = np.take(tx, indices)
-        current_ty = np.take(ty, indices)
-
-        # Identify the arm of the barcode
-        arm = mapping[c_id]
-
-        # Graph arms by color and barcodes by marker
-        axes[idx_mem].scatter(current_tx, current_ty, c = colors[arm], marker = marker_list[m_id])
-
-    return fig, axes
 
 def run_experiment(exp_base, exp_difficulty):
 
@@ -427,13 +380,14 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings['epochs'] = 0
 
     # Task Complexity
-    exp_settings['noise_percent'] = [0.125, 0.25, 0.5, 0.75, 0.875]    #What noise percent to apply during eval phase
+    exp_settings['noise_percent'] = []                  # What noise percent to apply during eval phase
     exp_settings['noise_eval_epochs'] = 0               # How long to spend on a single noise percent eval
     exp_settings['noise_train_percent'] = 0             # What noise percent to apply during training, if any
     exp_settings['sim_threshold'] = 0                   # Cosine similarity threshold for single clustering
     exp_settings['hamming_threshold'] = 0               # Hamming distance for multi clustering
 
     # Data Logging
+    exp_settings['tensorboard_logging'] = False
     ### End of Experimental Parameters ###
 
     # Forced Hyperparams (found after multiple passes through Bayesian Optimization)
@@ -450,9 +404,8 @@ def run_experiment(exp_base, exp_difficulty):
     # Experimental Variables
     mem_store_types, exp_settings['epochs'], exp_settings['noise_eval_epochs'], exp_settings['noise_train_percent'], num_repeats, file_loc = exp_base
     exp_settings['hamming_threshold'], exp_settings['num_arms'], exp_settings['num_barcodes'], exp_settings[
-        'barcode_size'], exp_settings['pulls_per_episode'], exp_settings['sim_threshold'] = exp_difficulty
+        'barcode_size'], exp_settings['pulls_per_episode'], exp_settings['sim_threshold'], exp_settings['noise_percent'] = exp_difficulty
 
-    exp_settings['tensorboard_logging'] = (num_repeats == 1 and exp_settings['epochs'] >= 200)
     # Safety Assertions
     assert exp_settings['epochs'] >= 10, "Training epochs must be greater than 10"
     assert exp_settings['pulls_per_episode'] >= 2, "Pulls per episode must be greater than 2"
@@ -460,135 +413,30 @@ def run_experiment(exp_base, exp_difficulty):
     assert exp_settings['num_barcodes'] <= 20, "Too many distinct barcodes to display with current selection of labels in T-SNE"
 
     ### Beginning of Experimental Runs ###
-    f, axes = plt.subplots(1, 1, figsize=(8, 6))
-    f1, axs = plt.subplots(1, 1, figsize=(8, 6))
-    # f2, axs2 = plt.subplots(1, 1, figsize=(8, 6))
-
-    # Prevent graph subscripting bug if running test on only one mem_store type
-    num_tsne = len(mem_store_types) if len(mem_store_types) > 2 else 2
-    f3, axes3 = plt.subplots(1, num_tsne, figsize=(5*num_tsne, 6))
-
     exp_length = exp_settings['epochs']+exp_settings['noise_eval_epochs']*len(exp_settings['noise_percent'])
     for idx_mem, mem_store in enumerate(mem_store_types):
         tot_rets = np.zeros(exp_length)
+        tot_acc = np.zeros(exp_length)
         exp_settings['mem_store'] = mem_store
+        exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
+        exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n_{exp_settings['mem_store']}"
+        exp_name = exp_size+exp_other
         for i in range(num_repeats):
 
-            print(f"\nNew Run --> Iteration: {i} | Type: {mem_store} | Device: {exp_settings['torch_device']}")
+            # exp_settings['tensorboard_logging'] = (i== num_repeats - 1 and exp_settings['epochs'] >= 200)
+            print(f"\nNew Run --> Iteration: {i} | Exp: {exp_name}")
+            exp_settings['exp_name'] = exp_name + f"_{i}"
             logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
             log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
             log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
-            keys, prediction_mapping, epoch_mapping = key_data 
+            log_keys, epoch_mapping = key_data 
             tot_rets += log_return/num_repeats
+            tot_acc += log_embedder_accuracy/num_repeats
+        
+        # Keys will be tensors, and will save keys from only the last run of a repeated run
+        torch.save(log_keys, "..\\Mem_Store_Project\\data\\"+exp_name+".pt")
 
-        # LOWESS Smoothed Graphs
-        frac = 0.05
-        in_array = np.arange(exp_length)
-        lowess_rets = lowess(tot_rets, in_array, frac = frac, return_sorted=False)
-        axes.plot(lowess_rets, label=f"Mem: {mem_store.capitalize()}")
-
-        if mem_store != 'L2RL':
-            lowess_acc = lowess(log_embedder_accuracy, in_array, frac = frac, return_sorted=False)
-            axs.plot(lowess_acc, label=f"Mem: {mem_store.capitalize()}")
-
-            # axs2.scatter(range(len(epoch_sim_logs)), epoch_sim_logs,
-            #                label=f"Mem: {mem_store.capitalize()}")
-
-        # # Rolling Window Smoothed Graphs
-        # # Returns
-        # smoothed_rewards = pd.Series.rolling(pd.Series(tot_rets), 5).mean()
-        # smoothed_rewards = [elem for elem in smoothed_rewards]
-        # axes.scatter(in_array, tot_rets, label=f"Mem: {mem_store.capitalize()}")
-        # axes.plot(smoothed_rewards, label=f"Mem: {mem_store}")
-
-        # # Embedder/Mem Accuracy 
-        # smoothed_accuracy = pd.Series.rolling(pd.Series(log_embedder_accuracy), 5).mean()
-        # smoothed_accuracy = [elem for elem in smoothed_accuracy]
-        # axs.scatter(in_array, smoothed_accuracy, label=f"Mem: {mem_store.capitalize()}")
-        # axs.plot(smoothed_accuracy, label=f"Mem: {mem_store}")
-
-        # T-SNE to visualize keys in memory
-        embeddings = [x[0] for x in keys]
-        labels = [x[1] for x in keys]
-
-        # Artifically boost datapoint count to make tsne nicer
-        while len(embeddings) < 100:
-            embeddings.extend(embeddings)
-            labels.extend(labels)
-
-        f3, axes3 = plot_tsne_distribution(embeddings, labels, epoch_mapping, f3, axes3, idx_mem)
-        axes3[idx_mem].xaxis.set_visible(False)
-        axes3[idx_mem].yaxis.set_visible(False)
-        if mem_store != 'L2RL':
-            axes3[idx_mem].set_title(mem_store.capitalize())
-        else:
-            axes3[idx_mem].set_title('Hidden (L2RL)')
-         
-    # Theoretical Max/Min Returns
-    # perfect_ret, random_ret = expected_return(exp_settings['num_arms'], exp_settings['perfect_info'])
-    # axes.axhline(y=random_ret, color='b', linestyle='dashed', label = 'Random Pulls')
-    # axes.axhline(y=perfect_ret, color='k', linestyle='dashed', label = 'Theoretical Max')
-
-    # Graph Labeling and Misc Stuff
-    if exp_settings['hamming_threshold']:
-        cluster_info = f"IntraCluster Dist: {exp_settings['hamming_threshold']} | InterCluster Dist: {exp_settings['barcode_size']-2*exp_settings['hamming_threshold']}"
-    else:
-        cluster_info = f"Similarity: {exp_settings['sim_threshold']}" 
-
-    graph_title = f""" --- Returns averaged over {num_repeats} runs ---
-    Arms: {exp_settings['num_arms']} | Unique Barcodes: {exp_settings['num_barcodes']} | Barcode Dim: {exp_settings['barcode_size']}
-    LOWESS: {frac} | Noise Trained: {int(exp_settings['barcode_size']*exp_settings['noise_train_percent'])} bits | Clusters: {int(exp_settings['num_barcodes']/exp_settings['num_arms'])}
-    {cluster_info}
-    """
-
-    # Noise Partitions
-    prop_cycle = plt.rcParams['axes.prop_cycle']
-    colors = prop_cycle.by_key()['color']
-    for idx, noise_percent in enumerate(exp_settings['noise_percent']):
-        axes.axvline(x=exp_settings['epochs'] + idx*exp_settings['noise_eval_epochs'], color = colors[idx], linestyle = 'dashed',
-            label = f"{int(exp_settings['barcode_size']*noise_percent)} Bits Noisy")
-        axs.axvline(x=exp_settings['epochs'] + idx*exp_settings['noise_eval_epochs'], color = colors[idx], linestyle = 'dashed',
-            label = f"{int(exp_settings['barcode_size']*noise_percent)} Bits Noisy")
-
-    sns.despine()
-
-    # Returns
-    axes.set_ylabel('Returns')
-    axes.set_xlabel('Epoch')
-    axes.legend(bbox_to_anchor=(0, -0.2, 1, 0), loc="upper left",
-            mode="expand", borderaxespad=0, ncol=3)
-    f.tight_layout()
-    f.subplots_adjust(top=0.8)
-    f.suptitle(graph_title)
-
-    # Accuracy
-    axs.set_ylabel('Accuracy')
-    axs.set_xlabel('Epoch')
-    axs.set_title('Barcode Prediction Accuracy from Memory Retrievals')
-    axs.axhline(y=1/exp_settings['num_barcodes'], color='b', linestyle='dashed', label = 'Random Choice')
-    axs.legend(bbox_to_anchor=(0, -0.2, 1, 0), loc="upper left",
-            mode="expand", borderaxespad=0, ncol=2)
-    f1.tight_layout()
-
-    # # Memory Similarity
-    # axs2.set_xlabel('Pull Number')
-    # axs2.set_ylabel('Avg Similarity of Best Memory')
-    # axs2.legend(bbox_to_anchor=(0, -0.2, 1, 0), loc="upper left",
-    #         mode="expand", borderaxespad=0, ncol=2)
-    # f2.tight_layout()
-
-    # T-SNE
-    f3.tight_layout()
-    f3.subplots_adjust(top=0.8)
-    f3.suptitle("t-SNE on keys in memory from last training epoch\nIcon indicates real barcode, color is best arm choice")
-
-    # Graph Saving
-    file_loc = file_loc
-    exp_id = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s {exp_settings['hamming_threshold']} hamming {exp_settings['noise_train_percent']} noise_trained {num_repeats} run(s) "
-    plot_type = ['returns', 'accuracy', 'tsne']
-    if exp_length >= 200:
-        for fig_num, figa in enumerate([f, f1, f3]):
-            filename = file_loc + exp_id + plot_type[fig_num] +".png"
-            figa.savefig(filename)
-
-    plt.show()
+        # Logs will be numpy arrays
+        np.savez("..\\Mem_Store_Project\\data\\"+exp_name,
+                 tot_rets=tot_rets, tot_acc=tot_acc, epoch_mapping = epoch_mapping)
+    ### End of Experiment Data   
