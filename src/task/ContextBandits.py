@@ -125,25 +125,23 @@ class ContextualBandit():
             barcode = np.random.randint(0, 2, (self.barcode_size))
             if np.sum(barcode) == 0:
                 continue
-            if len(barcode_bag) == 0:
-                seed_bc = barcode
 
-            elif self.hamming_threshold:
-                for seed_bc in barcode_bag:
-                    h_d = self.hamming_distance(seed_bc, barcode)
+            # barcode -> string starts out at '[1 1 0]', thus the reductions on the end
+            barcode_string = np.array2string(barcode)[1:-1].replace(" ", "")
 
-                    # If the cluster seeds are too similar, throw it out
-                    if h_d < self.barcode_size - 2*self.hamming_threshold:
-                        new_seed = True
-                        break
+            for seed_bc in barcode_bag:
+                h_d = self.hamming_distance(seed_bc, barcode_string)
+
+                # If the cluster seeds are too similar, throw it out
+                if h_d < self.barcode_size - 2*self.hamming_threshold:
+                    new_seed = True
+                    break
 
             # Current Seed is too close to other seeds
             if new_seed:
                 new_seed = False
                 continue
             else:
-                # barcode -> string starts out at '[1 1 0]', thus the reductions on the end
-                barcode_string = np.array2string(barcode)[1:-1].replace(" ", "")
                 barcode_bag.add(barcode_string)
 
         # Barcode_bag now holds distinct cluster start points, create close clusters around those points
@@ -151,6 +149,7 @@ class ContextualBandit():
         for cluster in bc_clusters:
             mini_cluster_bag = set()
             mini_cluster_bag.add(cluster)
+            other_clusters = [np.asarray(list(x), dtype=int) for x in bc_clusters if x != cluster]
             cluster = np.asarray(list(cluster), dtype=int)
             while len(mini_cluster_bag) < self.num_arms:
                 barcode = np.copy(cluster)
@@ -167,14 +166,21 @@ class ContextualBandit():
                 if np.sum(barcode) == 0:
                     continue
 
-                elif self.hamming_threshold:
-                    h_d = self.hamming_distance(cluster, barcode)
-                    if h_d > self.hamming_threshold:
-                        continue
-                    else:
-                        # barcode -> string starts out at '[1 1 0]', thus the reductions on the end
-                        barcode_string = np.array2string(barcode)[1:-1].replace(" ", "")
-                        mini_cluster_bag.add(barcode_string)
+                h_d = self.hamming_distance(cluster, barcode)
+                other_cluster_centers = [self.hamming_distance(barcode, x) for x in other_clusters]
+
+                # BC is too far from center of chosen cluster
+                if h_d > self.hamming_threshold:
+                    continue
+
+                # BC is too close to other cluster centers
+                elif min(other_cluster_centers) < self.barcode_size - 2*self.hamming_threshold:
+                    continue
+
+                else:
+                    # barcode -> string starts out at '[1 1 0]', thus the reductions on the end
+                    barcode_string = np.array2string(barcode)[1:-1].replace(" ", "")
+                    mini_cluster_bag.add(barcode_string)
 
             # Need to store individual cluster for arm reshuffling at every epoch
             cluster_list = list(mini_cluster_bag)

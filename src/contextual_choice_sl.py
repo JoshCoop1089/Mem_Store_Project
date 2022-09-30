@@ -163,8 +163,8 @@ def run_experiment_sl(exp_settings):
                     # What indicies need to be randomized?
                     idx = random.sample(range(exp_settings['barcode_size']), noise_barcode_flip_locs)
 
-                    # Flip the values at the indicies
-                    mask = torch.tensor([1.0 for _ in idx], device = device)
+                    # Coin Flip to decide whether to flip the values at the indicies
+                    mask = torch.tensor([random.randint(0,1) for _ in idx], device = device)
 
                     noisy_bc = original_bc.detach().clone()
 
@@ -172,7 +172,7 @@ def run_experiment_sl(exp_settings):
                     for idx1, mask1 in zip(idx, mask):
                         noisy_bc[0][idx1] = float(torch.ne(mask1,noisy_bc[0][idx1]))
 
-                    #Cosine similarity doesn't like all 0's for matching
+                    #Cosine similarity doesn't like all 0's for matching in memory
                     if torch.sum(noisy_bc) == 0:
                         apply_noise_again = True
 
@@ -414,7 +414,7 @@ def run_experiment(exp_base, exp_difficulty):
 
     ### Beginning of Experimental Runs ###
     exp_length = exp_settings['epochs']+exp_settings['noise_eval_epochs']*len(exp_settings['noise_percent'])
-    epoch_info = np.array([exp_settings['epochs'], exp_settings['noise_eval_epochs'], exp_settings['noise_percent']], dtpye = object)
+    epoch_info = np.array([exp_settings['epochs'], exp_settings['noise_eval_epochs'], exp_settings['noise_percent']], dtype = object)
     for idx_mem, mem_store in enumerate(mem_store_types):
         tot_rets = np.zeros(exp_length)
         tot_acc = np.zeros(exp_length)

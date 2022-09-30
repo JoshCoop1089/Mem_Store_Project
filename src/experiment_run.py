@@ -21,8 +21,8 @@ try:
     exp_type = exp_types[int(sys.argv[1])]
 except:
     exp_type = exp_types
-training_epochs = 300
-noise_epochs = 40
+training_epochs = 200
+noise_epochs = 20
 noise_train_percent = 0
 
 # Experiment Difficulty
@@ -30,7 +30,7 @@ hamming_clustering = 1     #Create evenly distributed clusters based on arms/bar
 sim_threshold = 0           #Create one cluster regardless of arms/barcodes
 num_arms = 2
 num_barcodes = 4
-barcode_size = 24
+barcode_size = 8
 pulls_per_episode = 10
 noise_percent = [0.125, 0.25, 0.5, 0.75, 0.875]
 
