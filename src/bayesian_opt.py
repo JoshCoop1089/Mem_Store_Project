@@ -15,23 +15,23 @@ def avg_returns(dim_hidden_lstm = 0, lstm_learning_rate = 0, dim_hidden_a2c = 0,
     ### Experimental Parameters ###
     exp_settings['randomize'] = False
     exp_settings['perfect_info'] = False
-    exp_settings['torch_device'] = 'CPU'            
+    exp_settings['torch_device'] = 'GPU'            
 
     # Task Info
     exp_settings['kernel'] = 'cosine'               
     exp_settings['mem_store'] = 'embedding'
 
     # Task Complexity
-    exp_settings['num_arms'] = 6
-    exp_settings['num_barcodes'] = 12
+    exp_settings['num_arms'] = 2
+    exp_settings['num_barcodes'] = 4
     exp_settings['barcode_size'] = 24
     exp_settings['pulls_per_episode'] = 10
-    exp_settings['epochs'] = 500
+    exp_settings['epochs'] = 400
     exp_settings['hamming_threshold'] = 1
 
     # Noise eval settings not used
-    exp_settings['noise_eval_epochs'] = 0
-    exp_settings['noise_percent'] = []
+    exp_settings['noise_eval_epochs'] = 100
+    exp_settings['noise_percent'] = [0.25]
     exp_settings['sim_threshold'] = 0
     exp_settings['noise_train_percent'] = 0
 
@@ -66,21 +66,27 @@ def avg_returns(dim_hidden_lstm = 0, lstm_learning_rate = 0, dim_hidden_a2c = 0,
     logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
     log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
     log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
-    keys, prediction_mapping, epoch_mapping = key_data 
+    log_keys, epoch_mapping = key_data
 
     # Focusing only on last quarter of returns to maximize longer term learning
     final_q = 3*(exp_settings['epochs']//4)
-    target = np.mean(log_return[final_q:])
+    noise = np.mean(log_return[exp_settings['epochs']:])
+    plateau = np.mean(log_return[final_q:exp_settings['epochs']])
+
+    # Maximize over the change in plateau being minimal during noise
+    # noise/plateau should trend to 1 if we're doing better
+    # also include bonus for high plateau and high noise ending means
+    target = noise/plateau + plateau + noise
     print(f"Bayes Target = {round(target, 3)}")
     return target
     
 # Bounded region of parameter space
 pbounds = { 
-            'dim_hidden_a2c': (4, 7),               #transformed into 2**x in function
-            'dim_hidden_lstm': (4, 7),              #transformed into 2**x in function
-            'lstm_learning_rate': (-5, -2),         #transformed into 10**x in function
-            'embedding_size': (4,7),                #transformed into 2**x in function
+            'dim_hidden_a2c': (5, 8),               #transformed into 2**x in function
+            'dim_hidden_lstm': (5, 8),              #transformed into 2**x in function
             'embedding_learning_rate': (-5, -2),    #transformed into 10**x in function
+            'embedding_size': (5,8),                #transformed into 2**x in function
+            'lstm_learning_rate': (-5, -2),         #transformed into 10**x in function
             # 'entropy_error_coef': (0, 0.5),
             # 'value_error_coef': (0, 0.75),
             }
@@ -93,15 +99,15 @@ optimizer = BayesianOptimization(
 )
 
 # Suspend/Resume Function for longer iterations
-# logger = JSONLogger(
-#     path="./dnd-lstm-sup-learning/src/logs_5_1k_epochs.json", reset=False)
+logger = JSONLogger(
+    path="./logs_4a8n24s1h_500_epochs.json", reset=False)
 
-# optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
+optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
 # print("New optimizer is now aware of {} points.".format(len(optimizer.space)))
 
 optimizer.maximize(
-    init_points=3,
-    n_iter=10,
+    init_points=1,
+    n_iter=2,
 )
 
 print(" *-* "*5)    

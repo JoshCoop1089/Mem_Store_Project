@@ -155,8 +155,7 @@ def run_experiment_sl(exp_settings):
                 apply_noise_again = True
                 action = observations_barcodes_rewards[m][0][0:num_arms].view(1,-1)
                 original_bc = observations_barcodes_rewards[m][0][num_arms:-1].view(1,-1)
-                reward = observations_barcodes_rewards[m][0][-1].view(
-                        1, -1)
+                reward = observations_barcodes_rewards[m][0][-1].view(1, -1)
                 while apply_noise_again:
                     apply_noise_again = False
                     
@@ -415,29 +414,42 @@ def run_experiment(exp_base, exp_difficulty):
     ### Beginning of Experimental Runs ###
     exp_length = exp_settings['epochs']+exp_settings['noise_eval_epochs']*len(exp_settings['noise_percent'])
     epoch_info = np.array([exp_settings['epochs'], exp_settings['noise_eval_epochs'], exp_settings['noise_percent']], dtype = object)
-    for idx_mem, mem_store in enumerate(mem_store_types):
-        tot_rets = np.zeros(exp_length)
-        tot_acc = np.zeros(exp_length)
-        exp_settings['mem_store'] = mem_store
-        exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
-        exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n_{exp_settings['mem_store']}"
-        exp_name = exp_size+exp_other
-        for i in range(num_repeats):
+    exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
+    exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n"
+    exp_vals = exp_size+exp_other
+    filename = "..\\Mem_Store_Project\\"+exp_vals+".txt"
+    with open(filename, 'a') as f:
+        f.write("\n"+" -*-_-*- "*3)
+        for idx_mem, mem_store in enumerate(mem_store_types):
+            start_time = time.time()
+            date_time = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(start_time))
+            f.write("\n"+"-"*10 + f'Starting {mem_store}'+"-"*10 + f" {str(date_time)}"+"\n")
+            tot_rets = np.zeros(exp_length)
+            tot_acc = np.zeros(exp_length)
+            exp_settings['mem_store'] = mem_store
+            exp_name = exp_size+exp_other+f"_{exp_settings['mem_store']}"
+            for i in range(num_repeats):
+                rep_time = time.time()
+                repS_time = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(rep_time))
+                f.write(f"\tStarting {mem_store} Iteration {i} --  {str(repS_time)}\n")
+                # exp_settings['tensorboard_logging'] = (i== num_repeats - 1 and exp_settings['epochs'] >= 200)
+                print(f"\nNew Run --> Iteration: {i} | Exp: {exp_name}")
+                exp_settings['exp_name'] = exp_name + f"_{i}"
+                logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
+                log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
+                log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
+                log_keys, epoch_mapping = key_data 
+                tot_rets += log_return/num_repeats
+                tot_acc += log_embedder_accuracy/num_repeats
+            
+            # Keys will be tensors, and will save keys from only the last run of a repeated run
+            torch.save(log_keys, "..\\Mem_Store_Project\\data\\"+exp_name+".pt")
 
-            # exp_settings['tensorboard_logging'] = (i== num_repeats - 1 and exp_settings['epochs'] >= 200)
-            print(f"\nNew Run --> Iteration: {i} | Exp: {exp_name}")
-            exp_settings['exp_name'] = exp_name + f"_{i}"
-            logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
-            log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
-            log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
-            log_keys, epoch_mapping = key_data 
-            tot_rets += log_return/num_repeats
-            tot_acc += log_embedder_accuracy/num_repeats
-        
-        # Keys will be tensors, and will save keys from only the last run of a repeated run
-        torch.save(log_keys, "..\\Mem_Store_Project\\data\\"+exp_name+".pt")
+            # Logs will be numpy arrays
+            np.savez("..\\Mem_Store_Project\\data\\"+exp_name,
+                    tot_rets=tot_rets, tot_acc=tot_acc, epoch_mapping = epoch_mapping, epoch_info = epoch_info)
 
-        # Logs will be numpy arrays
-        np.savez("..\\Mem_Store_Project\\data\\"+exp_name,
-                 tot_rets=tot_rets, tot_acc=tot_acc, epoch_mapping = epoch_mapping, epoch_info = epoch_info)
+        f.write(" -*-_-*- "*3)
     ### End of Experiment Data   
