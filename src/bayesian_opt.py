@@ -22,10 +22,10 @@ def avg_returns(dim_hidden_lstm = 0, lstm_learning_rate = 0, dim_hidden_a2c = 0,
     exp_settings['mem_store'] = 'embedding'
 
     # Task Complexity
-    exp_settings['num_arms'] = 2
-    exp_settings['num_barcodes'] = 4
+    exp_settings['num_arms'] = 4
+    exp_settings['num_barcodes'] = 8
     exp_settings['barcode_size'] = 24
-    exp_settings['pulls_per_episode'] = 10
+    exp_settings['pulls_per_episode'] = 2
     exp_settings['epochs'] = 400
     exp_settings['hamming_threshold'] = 1
 
@@ -53,8 +53,6 @@ def avg_returns(dim_hidden_lstm = 0, lstm_learning_rate = 0, dim_hidden_a2c = 0,
 
     exp_settings['entropy_error_coef'] = 0.0391
     exp_settings['value_error_coef'] = 0.62
-
-
     #End HyperParam Searches for BayesOpt#
 
     # Print out current hyperparams to console
@@ -70,14 +68,14 @@ def avg_returns(dim_hidden_lstm = 0, lstm_learning_rate = 0, dim_hidden_a2c = 0,
 
     # Focusing only on last quarter of returns to maximize longer term learning
     final_q = 3*(exp_settings['epochs']//4)
-    noise = np.mean(log_return[exp_settings['epochs']:])
-    plateau = np.mean(log_return[final_q:exp_settings['epochs']])
+    noise = 10*np.mean(log_return[exp_settings['epochs']:])
+    plateau = 10*np.mean(log_return[final_q:exp_settings['epochs']])
 
     # Maximize over the change in plateau being minimal during noise
     # noise/plateau should trend to 1 if we're doing better
     # also include bonus for high plateau and high noise ending means
-    target = noise/plateau + plateau + noise
-    print(f"Bayes Target = {round(target, 3)}")
+    target = 2*(plateau + noise) - plateau/noise
+    print(f"Bayes Target = {round(target, 3)} | Plateau: {round(plateau/10, 3)} | Noise: {round(noise/10, 3)}")
     return target
     
 # Bounded region of parameter space
@@ -97,17 +95,16 @@ optimizer = BayesianOptimization(
     verbose=2,  # verbose = 1 prints only when a maximum is observed, verbose = 0 is silent
     random_state=1,
 )
-
+load_logs(optimizer, logs=["./logs_4a8n24s1h_500_epochs.json"])
 # Suspend/Resume Function for longer iterations
 logger = JSONLogger(
     path="./logs_4a8n24s1h_500_epochs.json", reset=False)
-
 optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
-# print("New optimizer is now aware of {} points.".format(len(optimizer.space)))
+print("New optimizer is now aware of {} points.".format(len(optimizer.space)))
 
 optimizer.maximize(
     init_points=1,
-    n_iter=2,
+    n_iter=80,
 )
 
 print(" *-* "*5)    

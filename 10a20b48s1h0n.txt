@@ -1,0 +1,8 @@
+
+ -*-_-*-  -*-_-*-  -*-_-*- 
+----------Starting context---------- 2022-10-05 23:47:55
+	Starting context Iteration 0 --  2022-10-05 23:47:55
+
+ -*-_-*-  -*-_-*-  -*-_-*- 
+----------Starting context---------- 2022-10-05 23:48:41
+	Starting context Iteration 0 --  2022-10-05 23:48:41

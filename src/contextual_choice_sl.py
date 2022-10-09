@@ -333,7 +333,16 @@ def run_experiment_sl(exp_settings):
     # Final Results
     print("- - - "*3)
     final_q = 3*(exp_settings['epochs']//4)
-    print("Last Quarter Return Avg: ", round(np.mean(log_return[final_q:]), 3))
+    plateau = 10*np.mean(log_return[final_q:exp_settings['epochs']])
+    noise = 10*np.mean(log_return[exp_settings['epochs']:])
+
+    # Maximize over the change in plateau being minimal during noise
+    # noise/plateau should trend to 1 if we're doing better
+    # also include bonus for high plateau and high noise ending means
+    target = 2*(plateau + noise) - plateau/noise
+    print(
+        f"Bayes Target = {round(target, 3)} | Plateau: {round(plateau/10, 3)} | Noise: {round(noise/10, 3)}")
+    # print("Last Quarter Return Avg: ", round(np.mean(log_return[final_q:]), 3))
     print("Total Time Elapsed:", round(sum(run_time), 1), "secs")
     print("Avg Epoch Time:", round(np.mean(run_time), 2), "secs")
     print("- - - "*3)

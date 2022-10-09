@@ -261,6 +261,8 @@ def graph_keys_multiple_memory_types(exp_base, exp_difficulty):
         else:
             axes[idx_mem].set_title('Hidden (L2RL)')
 
+    f.subplots_adjust(top=0.8)
+    f.suptitle(exp_name + "\nKey Distribution for Memory at End of Training")
     f.tight_layout()
     plt.show()
     exp_len = np.load(exp_name1+".npz", allow_pickle=True)['epoch_info']
@@ -418,13 +420,13 @@ if __name__ == '__main__':
     # Experiment Difficulty
     num_arms = 10
     num_barcodes = 20
-    barcode_size = 24
+    barcode_size = 48
     noise_train_percent = 0
     hamming_clustering = 1     #Create evenly distributed clusters based on arms/barcodes
     sim_threshold = 0           #Create one cluster regardless of arms/barcodes
 
     # Randomized seed changes to average for returns graph
-    num_repeats = 5
+    num_repeats = 3
 
     # Modify this to fit your machines save paths
     figure_save_location = "..\\Mem_Store_Project\\figs\\"
@@ -433,10 +435,10 @@ if __name__ == '__main__':
     exp_base = exp_types, figure_save_location, num_repeats
     exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, sim_threshold, noise_train_percent
     graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns')
-    graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
+    # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
     # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
     # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy')
-    graph_keys_multiple_memory_types(exp_base, exp_difficulty)
-    for mem_type in exp_types:
-        exp_base = mem_type, figure_save_location, num_repeats
-        graph_keys_single_run(exp_base, exp_difficulty)
+    # graph_keys_multiple_memory_types(exp_base, exp_difficulty)
+    # for mem_type in exp_types:
+    #     exp_base = mem_type, figure_save_location, num_repeats
+    #     graph_keys_single_run(exp_base, exp_difficulty)
