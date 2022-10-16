@@ -1,12 +1,14 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import torch
 # Win64bit Optimizations for TSNE
 from sklearn.manifold import TSNE
 from sklearnex import patch_sklearn
+
 patch_sklearn()
 from statsmodels.nonparametric.smoothers_lowess import lowess
-import torch
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
+
 
 ### Graphing Helper Functions ###
 # Theoretical Min/Max Return Performance
@@ -62,7 +64,7 @@ def graph_with_lowess_smoothing (exp_base, exp_difficulty, graph_type, use_lowes
 
     # Experimental Variables
     exp_settings = {}
-    mem_store_types, file_loc, num_repeats = exp_base
+    mem_store_types, file_loc = exp_base
     exp_settings['hamming_threshold'], exp_settings['num_arms'], exp_settings['num_barcodes'], exp_settings[
         'barcode_size'], exp_settings['sim_threshold'], exp_settings['noise_train_percent'] = exp_difficulty
 
@@ -97,6 +99,8 @@ def graph_with_lowess_smoothing (exp_base, exp_difficulty, graph_type, use_lowes
     exp_settings['epochs'] = exp_len[0]
     exp_settings['noise_eval_epochs'] = exp_len[1]
     exp_settings['noise_percent'] = exp_len[2]
+    # num_repeats = 1
+    num_repeats = exp_len[3]
 
     # Graph Labeling and Misc Stuff
     if exp_settings['hamming_threshold']:
@@ -109,7 +113,6 @@ def graph_with_lowess_smoothing (exp_base, exp_difficulty, graph_type, use_lowes
     Arms: {exp_settings['num_arms']} | Unique Barcodes: {exp_settings['num_barcodes']} | Barcode Dim: {exp_settings['barcode_size']}
     LOWESS: {min(frac, use_lowess)} | {cluster_info}
     """
-    # Noise Trained: {int(exp_settings['barcode_size']*exp_settings['noise_train_percent'])} Bits | 
 
     # Noise Partitions
     prop_cycle = plt.rcParams['axes.prop_cycle']
@@ -142,12 +145,96 @@ def graph_with_lowess_smoothing (exp_base, exp_difficulty, graph_type, use_lowes
         exp_title = file_loc + exp_name + f"{num_repeats}r_{graph_type}"+ ".png"
         f.savefig(exp_title)
 
+def graph_multi_barcode_sizes(exp_base, exp_difficulty, graph_type, use_lowess = True):
+    # Experimental Variables
+    exp_settings = {}
+    mem_store_types, file_loc = exp_base
+    exp_settings['hamming_threshold'], exp_settings['num_arms'], exp_settings['num_barcodes'], exp_settings[
+        'barcode_size'], exp_settings['sim_threshold'], exp_settings['noise_train_percent'] = exp_difficulty
+    exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b"
+    exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n"
+    
+    # LOWESS Smoothed Graphs
+    frac = 0.05
+    marker_list = ['dashdot','solid', (0, (3, 1, 1)), 'dashed']
+
+    for mem_store in mem_store_types:
+        f, axes = plt.subplots(1, 1, figsize=(8, 6))
+
+        for idx_bc, bc_size in enumerate(exp_settings['barcode_size']):
+            
+            exp_name = exp_size+f"{bc_size}s"+exp_other
+            exp_name1 = "..\\Mem_Store_Project\\data\\" + exp_name + f"_{mem_store}.npz"
+            try:
+                # Returns
+                if graph_type == 'Returns':
+                    data = np.load(exp_name1)['tot_rets']
+                
+                # Accuracy
+                elif graph_type == 'Accuracy':
+                    data = np.load(exp_name1)['tot_acc']
+            except:
+                continue
+                                
+            in_array = np.arange(len(data))
+            lowess_data = lowess(data, in_array,
+                                    frac=frac, return_sorted=False)
+
+            if not use_lowess:
+                axes.plot(data, linestyle = marker_list[idx_bc], label=f"BC_Size: {bc_size}")
+            else:
+                axes.plot(lowess_data, linestyle = marker_list[idx_bc], label=f"BC_Size: {bc_size}")
+
+        exp_len = np.load(exp_name1, allow_pickle=True)['epoch_info']
+        exp_settings['epochs'] = exp_len[0]
+        exp_settings['noise_eval_epochs'] = exp_len[1]
+        exp_settings['noise_percent'] = exp_len[2]
+        try:
+            num_repeats = exp_len[3]
+        except:
+            num_repeats = 1
+
+        # Graph Labeling and Misc Stuff
+        if exp_settings['hamming_threshold']:
+            cluster_info =  f"Clusters: {int(exp_settings['num_barcodes']/exp_settings['num_arms'])}\nIntraCluster Dist: {exp_settings['hamming_threshold']}"+\
+                            f" | InterCluster Dist: {bc_size-max(2*exp_settings['hamming_threshold'], exp_settings['num_arms']-1)}"
+        else:
+            cluster_info = f"Similarity: {exp_settings['sim_threshold']}"
+
+        graph_title = f""" --- {graph_type} averaged over {num_repeats} runs ---
+        Arms: {exp_settings['num_arms']} | Unique Barcodes: {exp_settings['num_barcodes']} | Memory Type: {mem_store}
+        LOWESS: {min(frac, use_lowess)} | {cluster_info}
+        """
+
+        # Noise Partitions
+        prop_cycle = plt.rcParams['axes.prop_cycle']
+        colors = prop_cycle.by_key()['color']
+        for idx, noise_percent in enumerate(exp_settings['noise_percent']):
+            axes.axvline(x=exp_settings['epochs'] + idx*exp_settings['noise_eval_epochs'], color=colors[idx], linestyle='dashed',
+                        label=f"{int(bc_size*noise_percent)} Bits Noisy")
+
+        sns.despine()
+        axes.set_xlabel('Epoch')
+        axes.set_ylabel(f'{graph_type}')
+        axes.legend(bbox_to_anchor=(0, -0.2, 1, 0), loc="upper left",
+                    mode="expand", borderaxespad=0, ncol=3)
+        f.tight_layout()
+        f.subplots_adjust(top=0.8)
+        f.suptitle(graph_title)
+
+        plt.show()
+
+        # Graph Saving
+        if len(data) >= 200:
+            exp_title = file_loc + exp_size + "Xs" + exp_other + f"{num_repeats}r_{graph_type}"+ ".png"
+            f.savefig(exp_title)
+    return
 
 def graph_keys_single_run (exp_base, exp_difficulty):
 
         # Experimental Variables
     exp_settings = {}
-    mem_store_types, file_loc, num_repeats = exp_base
+    mem_store_types, file_loc = exp_base
     exp_settings['hamming_threshold'], exp_settings['num_arms'], exp_settings['num_barcodes'], exp_settings[
         'barcode_size'], exp_settings['sim_threshold'], exp_settings['noise_train_percent'] = exp_difficulty
 
@@ -180,9 +267,9 @@ def graph_keys_single_run (exp_base, exp_difficulty):
         axes[idx_mem].yaxis.set_visible(False)
         axes[idx_mem].set_title(f"{train[idx_mem]}%")
 
-    # Keys for the end of every noise eval epoch (probably 5)
-    f1, axes1 = plt.subplots(
-        1, len(all_keys[4:]), figsize=(5*len(all_keys[4:]), 6))
+    # Keys for the end of every noise eval epoch
+    num_noise_evals = max(len(all_keys[4:]), 2)
+    f1, axes1 = plt.subplots(1, num_noise_evals, figsize=(5*num_noise_evals, 6))
     exp_noise = np.load(exp_name+".npz", allow_pickle=True)['epoch_info'][2]
 
     for idx_mem, memory in enumerate(all_keys[4:]):
@@ -220,7 +307,7 @@ def graph_keys_multiple_memory_types(exp_base, exp_difficulty):
 
     # Experimental Variables
     exp_settings = {}
-    mem_store_types, file_loc, num_repeats = exp_base
+    mem_store_types, file_loc = exp_base
     exp_settings['hamming_threshold'], exp_settings['num_arms'], exp_settings['num_barcodes'], exp_settings[
         'barcode_size'], exp_settings['sim_threshold'], exp_settings['noise_train_percent'] = exp_difficulty
 
@@ -415,30 +502,33 @@ def make_graphs(exp_base, exp_difficulty):
     plt.show()
 
 if __name__ == '__main__':
+    exp_types = ['embedding']
     exp_types = ['context', 'embedding', 'hidden', 'L2RL']
 
     # Experiment Difficulty
     num_arms = 10
     num_barcodes = 20
-    barcode_size = 48
+    barcode_size = 60
     noise_train_percent = 0
-    hamming_clustering = 1     #Create evenly distributed clusters based on arms/barcodes
+    hamming_clustering = 1      #Create evenly distributed clusters based on arms/barcodes
     sim_threshold = 0           #Create one cluster regardless of arms/barcodes
-
-    # Randomized seed changes to average for returns graph
-    num_repeats = 3
 
     # Modify this to fit your machines save paths
     figure_save_location = "..\\Mem_Store_Project\\figs\\"
     ###### NO MORE CHANGES!!!!!!!! ##########
 
-    exp_base = exp_types, figure_save_location, num_repeats
+    exp_base = exp_types, figure_save_location
     exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, sim_threshold, noise_train_percent
-    graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns')
+    # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns')
     # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
-    # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
-    # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy')
+    # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
+    # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy')
     # graph_keys_multiple_memory_types(exp_base, exp_difficulty)
     # for mem_type in exp_types:
-    #     exp_base = mem_type, figure_save_location, num_repeats
+    #     exp_base = mem_type, figure_save_location
     #     graph_keys_single_run(exp_base, exp_difficulty)
+
+    barcode_size = [24,48,60]
+    exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, sim_threshold, noise_train_percent
+    graph_multi_barcode_sizes(exp_base, exp_difficulty, 'Returns')
+    

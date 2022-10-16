@@ -1,12 +1,17 @@
 """demo: train a DND LSTM on a contextual choice task
 """
-import time, random
-import torch
+import random
+import time
+
 import numpy as np
+import torch
 from torch.utils.tensorboard import SummaryWriter
-from task.ContextBandits import ContextualBandit
+
 from sl_model import DNDLSTM as Agent
-from sl_model.utils import get_reward_from_assumed_barcode, compute_returns, compute_a2c_loss
+from sl_model.utils import (compute_a2c_loss, compute_returns,
+                            get_reward_from_assumed_barcode)
+from task.ContextBandits import ContextualBandit
+
 
 def run_experiment_sl(exp_settings):
     """
@@ -117,6 +122,10 @@ def run_experiment_sl(exp_settings):
     print("\n", "-*-_-*- "*3, "\n")
     # loop over epoch
     for i in range(n_epochs):
+
+        # # Anneal Entropy from 1 down to 0 over course of training
+        # entropy_weight = (exp_settings['epochs']-i)/exp_settings['epochs']
+
         time_start = time.perf_counter()
 
         # get data for this epoch
@@ -329,22 +338,15 @@ def run_experiment_sl(exp_settings):
         if i in key_save_epochs:
             keys, prediction_mapping = agent.get_all_mems_embedder()
             log_keys.append(keys)
-    
-    # Final Results
-    print("- - - "*3)
-    final_q = 3*(exp_settings['epochs']//4)
-    plateau = 10*np.mean(log_return[final_q:exp_settings['epochs']])
-    noise = 10*np.mean(log_return[exp_settings['epochs']:])
 
-    # Maximize over the change in plateau being minimal during noise
-    # noise/plateau should trend to 1 if we're doing better
-    # also include bonus for high plateau and high noise ending means
-    target = 2*(plateau + noise) - plateau/noise
-    print(
-        f"Bayes Target = {round(target, 3)} | Plateau: {round(plateau/10, 3)} | Noise: {round(noise/10, 3)}")
-    # print("Last Quarter Return Avg: ", round(np.mean(log_return[final_q:]), 3))
-    print("Total Time Elapsed:", round(sum(run_time), 1), "secs")
-    print("Avg Epoch Time:", round(np.mean(run_time), 2), "secs")
+    # Final Results
+    no_noise_eval = round(np.mean(log_return[exp_settings['epochs']:exp_settings['epochs']+exp_settings['noise_eval_epochs']]), 3)
+
+    print("- - - "*3)
+    print("No Noise Avg:\t", no_noise_eval)
+    print("Total Time:\t", round(sum(run_time), 1), "secs")
+    print("Avg Train Time:\t", round(np.mean(run_time[:exp_settings['epochs']]), 2), "secs")
+    print("Avg Eval Time:\t", round(np.mean(run_time[exp_settings['epochs']:]), 2), "secs")
     print("- - - "*3)
 
     logs_for_graphs = log_return, log_embedder_accuracy, epoch_sim_log
@@ -422,43 +424,35 @@ def run_experiment(exp_base, exp_difficulty):
 
     ### Beginning of Experimental Runs ###
     exp_length = exp_settings['epochs']+exp_settings['noise_eval_epochs']*len(exp_settings['noise_percent'])
-    epoch_info = np.array([exp_settings['epochs'], exp_settings['noise_eval_epochs'], exp_settings['noise_percent']], dtype = object)
+    epoch_info = np.array([exp_settings['epochs'], exp_settings['noise_eval_epochs'], exp_settings['noise_percent'], num_repeats], dtype = object)
     exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
     exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n"
     exp_vals = exp_size+exp_other
-    filename = "..\\Mem_Store_Project\\"+exp_vals+".txt"
-    with open(filename, 'a') as f:
-        f.write("\n"+" -*-_-*- "*3)
-        for idx_mem, mem_store in enumerate(mem_store_types):
-            start_time = time.time()
-            date_time = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(start_time))
-            f.write("\n"+"-"*10 + f'Starting {mem_store}'+"-"*10 + f" {str(date_time)}"+"\n")
-            tot_rets = np.zeros(exp_length)
-            tot_acc = np.zeros(exp_length)
-            exp_settings['mem_store'] = mem_store
-            exp_name = exp_size+exp_other+f"_{exp_settings['mem_store']}"
-            for i in range(num_repeats):
-                rep_time = time.time()
-                repS_time = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(rep_time))
-                f.write(f"\tStarting {mem_store} Iteration {i} --  {str(repS_time)}\n")
-                # exp_settings['tensorboard_logging'] = (i== num_repeats - 1 and exp_settings['epochs'] >= 200)
-                print(f"\nNew Run --> Iteration: {i} | Exp: {exp_name}")
-                exp_settings['exp_name'] = exp_name + f"_{i}"
-                logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
-                log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
-                log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
-                log_keys, epoch_mapping = key_data 
-                tot_rets += log_return/num_repeats
-                tot_acc += log_embedder_accuracy/num_repeats
-            
-            # Keys will be tensors, and will save keys from only the last run of a repeated run
-            torch.save(log_keys, "..\\Mem_Store_Project\\data\\"+exp_name+".pt")
+    for idx_mem, mem_store in enumerate(mem_store_types):
+        tot_rets = np.zeros(exp_length)
+        tot_acc = np.zeros(exp_length)
+        exp_settings['mem_store'] = mem_store
+        exp_name = exp_size+exp_other+f"_{exp_settings['mem_store']}"
+        for i in range(num_repeats):
+            print(f"\nNew Run --> Iteration: {i} | Exp: {exp_name}")
 
-            # Logs will be numpy arrays
-            np.savez("..\\Mem_Store_Project\\data\\"+exp_name,
-                    tot_rets=tot_rets, tot_acc=tot_acc, epoch_mapping = epoch_mapping, epoch_info = epoch_info)
+            # Save tensorboard returns, accuracy, and r-gates for last run of long tests
+            exp_settings['tensorboard_logging'] = (i== num_repeats - 1 and exp_settings['epochs'] >= 200)
 
-        f.write(" -*-_-*- "*3)
+            exp_settings['exp_name'] = exp_name
+            logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
+            log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
+            log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
+            log_keys, epoch_mapping = key_data 
+
+            # Find total averages over all repeats
+            tot_rets += log_return/num_repeats
+            tot_acc += log_embedder_accuracy/num_repeats
+
+        # Keys will be tensors, and will save keys from only the first run of a repeated run to capture training data
+        torch.save(log_keys, "..\\Mem_Store_Project\\data\\"+exp_name+".pt")
+        
+        # Logs will be numpy arrays of returns, accuracy, BC->Arm maps, and exp_info
+        np.savez("..\\Mem_Store_Project\\data\\"+exp_name,
+                tot_rets=tot_rets, tot_acc=tot_acc, epoch_mapping = epoch_mapping, epoch_info = epoch_info)
     ### End of Experiment Data   

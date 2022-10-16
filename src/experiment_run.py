@@ -1,5 +1,6 @@
-from contextual_choice_sl import run_experiment
 import sys
+
+from contextual_choice_sl import run_experiment
 
 """
 Notes:
@@ -16,28 +17,29 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 # Experiment Type and Length
 #context, embedding, hidden, L2RL
 #
-# exp_types = ['context','embedding', 'hidden', 'L2RL']
-exp_types = ['embedding']
+exp_types = ['context','embedding', 'hidden', 'L2RL']
+# exp_types = ['embedding']
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
-training_epochs = 400
-noise_epochs = 100
+training_epochs = 50
+noise_epochs = 10
 noise_train_percent = 0
 
 # Experiment Difficulty
 hamming_clustering = 1     #Create evenly distributed clusters based on arms/barcodes
 sim_threshold = 0           #Create one cluster regardless of arms/barcodes
-num_arms = 4
-num_barcodes = 8
+num_arms = 2
+num_barcodes = 4
 barcode_size = 24
-pulls_per_episode = 10
+pulls_per_episode = 2
 # noise_percent = [0.125, 0.25, 0.5, 0.75, 0.875]
-noise_percent = [0.25]
+# noise_percent = [0.125, 0.25, 0.5]
+noise_percent = [0]
 
 # Randomized seed changes to average for returns graph
-num_repeats = 1
+num_repeats = 3
 
 # Modify this to fit your machines save paths
 figure_save_location = "..\\Mem_Store_Project\\figs\\"

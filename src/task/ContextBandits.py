@@ -39,10 +39,12 @@ Trial is a sequence of 10 one hot encoded pulls indicating the pulled arm
 
 [100, barcode2, r:0] would be one input to the LSTM
 """
-import torch
-import numpy as np
-from numpy.linalg import norm
 import random
+
+import numpy as np
+import torch
+from numpy.linalg import norm
+
 
 class ContextualBandit():
     """
