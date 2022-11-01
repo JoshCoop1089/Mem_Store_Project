@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class A2C(nn.Module):
     """a MLP actor-critic network
     process: relu(Wx) -> pi, v
@@ -35,13 +36,13 @@ class A2C(nn.Module):
         self.dim_hidden = dim_hidden
 
         # Shared Feature Extractor
-        self.ih = nn.Linear(self.dim_input, self.dim_hidden, device = device)
+        self.ih = nn.Linear(self.dim_input, self.dim_hidden, device=device)
 
         # Actor/Policy Network
-        self.actor = nn.Linear(self.dim_hidden, self.dim_output, device = device)
+        self.actor = nn.Linear(self.dim_hidden, self.dim_output, device=device)
 
         # Critic/Value Network
-        self.critic = nn.Linear(self.dim_hidden, 1, device = device)
+        self.critic = nn.Linear(self.dim_hidden, 1, device=device)
 
     def forward(self, x, beta=1):
         """compute action distribution and value estimate, pi(a|s), v(s)
@@ -74,6 +75,7 @@ class A2C(nn.Module):
 
         return action_distribution, value_estimate, entropy
 
+
 class A2C_linear(nn.Module):
     """a linear actor-critic network
     process: x -> pi, v
@@ -98,10 +100,10 @@ class A2C_linear(nn.Module):
         super(A2C_linear, self).__init__()
         self.dim_input = dim_input
         self.dim_output = dim_output
-        self.actor = nn.Linear(dim_input, dim_output, device = device)
-        self.critic = nn.Linear(dim_input, 1, device = device)
+        self.actor = nn.Linear(dim_input, dim_output, device=device)
+        self.critic = nn.Linear(dim_input, 1, device=device)
 
-    def forward(self, x, beta = 1):
+    def forward(self, x, beta=1):
         """compute action distribution and value estimate, pi(a|s), v(s)
 
         Parameters

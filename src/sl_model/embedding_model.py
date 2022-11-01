@@ -5,22 +5,28 @@ import torch.nn.functional as F
 
 
 class Embedder(nn.Module):
-
     def __init__(self, exp_settings, device, bias=True):
         super(Embedder, self).__init__()
         self.bias = bias
         self.exp_settings = exp_settings
-        self.input_dim = exp_settings['dim_hidden_lstm']
-        embedding_size = exp_settings['embedding_size']
-        self.num_barcodes = exp_settings['num_barcodes']
-        self.num_arms = exp_settings['num_arms']
-
-        embed_size_check = int(2*embedding_size)
+        self.input_dim = exp_settings["dim_hidden_lstm"]
+        embedding_size = exp_settings["embedding_size"]
+        self.num_barcodes = exp_settings["num_barcodes"]
+        self.num_arms = exp_settings["num_arms"]
 
         # Basic Layers
-        self.h2m = nn.Linear(self.input_dim, 2*embedding_size, bias=bias, device = device)
+        self.h2m = nn.Linear(
+            self.input_dim, 2 * embedding_size, bias=bias, device=device
+        )
         # self.m2c = nn.Linear(embedding_size, 2*embedding_size, bias=bias, device = device)
-        self.e2c = nn.Linear(2*embedding_size, self.num_barcodes, bias=bias, device = device)
+        if exp_settings["embedder_training"] == "barcodes":
+            self.e2c = nn.Linear(
+                2 * embedding_size, self.num_barcodes, bias=bias, device=device
+            )
+        elif exp_settings["embedder_training"] == "arms":
+            self.e2c = nn.Linear(
+                2 * embedding_size, self.num_arms, bias=bias, device=device
+            )
 
         # init
         self.reset_parameter()
@@ -37,7 +43,7 @@ class Embedder(nn.Module):
     def reset_parameter(self):
         for name, wts in self.named_parameters():
             # print("emb: ", name)
-            if 'weight' in name:
+            if "weight" in name:
                 torch.nn.init.orthogonal_(wts)
-            elif 'bias' in name:
+            elif "bias" in name:
                 torch.nn.init.constant_(wts, 0)

@@ -1,7 +1,10 @@
 src/__pycache__
 src/sl_model/__pycache__
 src/task/__pycache__
+model
+figs
 Reports
 runs
 data
+.vscode
 random_tests.py

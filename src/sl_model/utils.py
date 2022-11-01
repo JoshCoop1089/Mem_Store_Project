@@ -2,8 +2,10 @@ import torch
 import numpy as np
 from torch.nn.functional import mse_loss
 
-'''helpers'''
+"""helpers"""
 eps = np.finfo(np.float32).eps.item()
+
+
 def compute_returns(rewards, device, gamma=0, normalize=False):
     """compute return in the standard policy gradient setting.
 
@@ -28,10 +30,11 @@ def compute_returns(rewards, device, gamma=0, normalize=False):
     for r in rewards[::-1]:
         R = r + gamma * R
         returns.insert(0, R)
-    returns = torch.tensor(returns, device = device)
+    returns = torch.tensor(returns, device=device)
     if normalize:
         returns = (returns - returns.mean()) / (returns.std() + eps)
     return returns
+
 
 def get_reward(a_t, a_t_targ):
     """define the reward function at time t
@@ -55,7 +58,10 @@ def get_reward(a_t, a_t_targ):
         r_t = 0
     return torch.tensor(r_t).type(torch.FloatTensor).data
 
-def get_reward_from_assumed_barcode(a_t, assumed_barcode, mapping, device, perfect_info = False):
+
+def get_reward_from_assumed_barcode(
+    a_t, assumed_barcode, mapping, device, perfect_info=False
+):
     """
     Once the A2C Policy predicts an action, determine the reward for that action under a certain barcode
 
@@ -70,7 +76,7 @@ def get_reward_from_assumed_barcode(a_t, assumed_barcode, mapping, device, perfe
         Tensor: Reward calculated for arm pull under assumed barcode
     """
     try:
-        best_arm = torch.tensor(mapping[assumed_barcode], device = device)
+        best_arm = torch.tensor(mapping[assumed_barcode], device=device)
         if perfect_info == False:
             if torch.equal(a_t, best_arm):
                 reward = float(np.random.random() < 0.9)
@@ -86,6 +92,7 @@ def get_reward_from_assumed_barcode(a_t, assumed_barcode, mapping, device, perfe
         reward = 0.0
 
     return torch.tensor(reward, device=device)
+
 
 def compute_a2c_loss(probs, values, returns, entropy):
     """compute the objective node for policy/value networks
@@ -109,10 +116,8 @@ def compute_a2c_loss(probs, values, returns, entropy):
     for prob_t, v_t, R_t in zip(probs, values, returns):
         A_t = R_t - v_t.item()
         policy_grads.append(-prob_t * A_t)
-        value_losses.append(
-            mse_loss(torch.squeeze(v_t), torch.squeeze(R_t))
-        )
-    loss_policy = torch.stack(policy_grads).mean()
-    loss_value = torch.stack(value_losses).mean()
-    entropies = torch.stack(entropy).mean()
+        value_losses.append(mse_loss(torch.squeeze(v_t), torch.squeeze(R_t)))
+    loss_policy = torch.stack(policy_grads).sum()
+    loss_value = torch.stack(value_losses).sum()
+    entropies = torch.stack(entropy).sum()
     return loss_policy, loss_value, entropies

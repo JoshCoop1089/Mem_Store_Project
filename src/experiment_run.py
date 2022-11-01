@@ -17,49 +17,37 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 # Experiment Type and Length
 #context, embedding, hidden, L2RL
 #
-exp_types = ['context','embedding', 'hidden', 'L2RL']
-# exp_types = ['embedding']
+# exp_types = ['context', 'embedding','hidden', 'L2RL']
+# exp_types = ['context', 'hidden', 'L2RL']
+exp_types = ['embedding']
+# exp_types = ['hidden']
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
-training_epochs = 50
-noise_epochs = 10
+training_epochs = 0
+noise_epochs = 5
 noise_train_percent = 0
+# embedder_train_type = 'arms'
+embedder_train_type = 'barcodes'
 
 # Experiment Difficulty
 hamming_clustering = 1     #Create evenly distributed clusters based on arms/barcodes
 sim_threshold = 0           #Create one cluster regardless of arms/barcodes
-num_arms = 2
-num_barcodes = 4
-barcode_size = 24
-pulls_per_episode = 2
-# noise_percent = [0.125, 0.25, 0.5, 0.75, 0.875]
-# noise_percent = [0.125, 0.25, 0.5]
-noise_percent = [0]
+num_arms = 10
+num_barcodes = 20
+barcode_size = 40
+pulls_per_episode = 10
+noise_percent = [0, 0.25, 0.5]
+# noise_percent = [0]
 
 # Randomized seed changes to average for returns graph
-num_repeats = 3
+num_repeats = 1
 
 # Modify this to fit your machines save paths
 figure_save_location = "..\\Mem_Store_Project\\figs\\"
 ###### NO MORE CHANGES!!!!!!!! ##########
 
-exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, num_repeats, figure_save_location
+exp_base = exp_type, training_epochs, noise_epochs, embedder_train_type, noise_train_percent, num_repeats, figure_save_location
 exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent
 run_experiment(exp_base, exp_difficulty)
-
-
-"""
-Tests to run:
-
-2a4b, 2a8b, 4a8b, 4a12b, 6a12b
-size 16, 24, 32
-
-Barcode Number
-Arm Number
-Barcode Size
-Baseline vs 1 Hamming Cluster
-
-Train with noise?
-"""
