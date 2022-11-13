@@ -143,10 +143,12 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
 
         # Returns
         if graph_type == "Returns":
+            axes.set_ylim([0.1, 0.9])
             data = np.load(exp_name1)["tot_rets"]
 
         # Accuracy
         elif graph_type == "Accuracy":
+            axes.set_ylim([0, 1])
             data = np.load(exp_name1)["tot_acc"]
 
         in_array = np.arange(len(data))
@@ -221,7 +223,6 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
         borderaxespad=0,
         ncol=3,
     )
-    axes.set_ylim([0, 1])
     f.tight_layout()
     f.subplots_adjust(top=0.8)
     f.suptitle(graph_title)
@@ -535,9 +536,9 @@ if __name__ == "__main__":
     exp_types = ["context", "embedding", "hidden", "L2RL"]
 
     # Experiment Difficulty
-    num_arms = 10
-    num_barcodes = 20
-    barcode_size = 40
+    num_arms = 4
+    num_barcodes = 8
+    barcode_size = 24
     noise_train_percent = 0
     hamming_clustering = 1  # Create evenly distributed clusters based on arms/barcodes
     sim_threshold = 0  # Create one cluster regardless of arms/barcodes

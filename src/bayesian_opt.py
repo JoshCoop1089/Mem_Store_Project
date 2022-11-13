@@ -22,25 +22,26 @@ def avg_returns(
     exp_settings["randomize"] = False
     exp_settings["perfect_info"] = False
     exp_settings["torch_device"] = "CPU"
+    exp_settings["load_pretrained_model"] = False
 
     # Task Info
     exp_settings["kernel"] = "cosine"
-    exp_settings["mem_store"] = "L2RL"
+    # exp_settings["mem_store"] = "L2RL"
+    exp_settings["mem_store"] = "embedding"
 
     # Task Complexity
-    exp_settings["num_arms"] = 2
-    exp_settings["num_barcodes"] = 4
+    exp_settings["num_arms"] = 4
+    exp_settings["num_barcodes"] = 8
     exp_settings["barcode_size"] = 24
-    exp_settings["epochs"] = 300
-    exp_settings["hamming_threshold"] = 1
+    exp_settings["epochs"] = 1500
     exp_settings["noise_eval_epochs"] = 50
-    # exp_settings['embedder_training'] = 'arms'
-    exp_settings["embedder_training"] = "barcodes"
 
     # Not really manipulated during bayes
+    exp_settings["hamming_threshold"] = 1
     exp_settings["pulls_per_episode"] = 10
-    exp_settings["noise_percent"] = [0]
+    exp_settings["noise_percent"] = [0.5]
     exp_settings["sim_threshold"] = 0
+    exp_settings["noise_type"] = False
     exp_settings["noise_train_percent"] = 0
 
     # Data Logging
@@ -49,28 +50,36 @@ def avg_returns(
 
     # HyperParam Searches for BayesOpt #
     # Using ints in bayes-opt for better performance
-    exp_settings["dim_hidden_a2c"] = int(
-        2**dim_hidden_lstm
-    )  # *** Forcing A2C and LSTM dimensions to be the same ***
-    exp_settings["dim_hidden_lstm"] = int(2**dim_hidden_lstm)
-    exp_settings["lstm_learning_rate"] = 10**lstm_learning_rate
-    exp_settings["value_error_coef"] = value_error_coef
+    # *** Forcing A2C and LSTM dimensions to be the same ***
+    # exp_settings["dim_hidden_a2c"] = int(2**dim_hidden_lstm)  
+    # exp_settings["dim_hidden_lstm"] = int(2**dim_hidden_lstm)
+    # exp_settings["lstm_learning_rate"] = 10**lstm_learning_rate
+    # exp_settings["value_error_coef"] = value_error_coef
     # exp_settings['entropy_error_coef'] = entropy_error_coef
-    # exp_settings['embedder_learning_rate'] = 10**embedding_learning_rate
-    # exp_settings['embedding_size'] = int(2**embedding_size)
+    exp_settings['embedder_learning_rate'] = 10**embedding_learning_rate
+    exp_settings['embedding_size'] = int(2**embedding_size)
     # End HyperParam Searches for BayesOpt#
 
     # Static vals for L2RL testing
-    # exp_settings['dim_hidden_a2c'] = int(2**6.5423)
-    # exp_settings['dim_hidden_lstm'] = int(2**6.5423)
+    #4a8b24s 500 epoch no noise init
+    # exp_settings['dim_hidden_a2c'] = int(2**6.711)
+    # exp_settings['dim_hidden_lstm'] = int(2**6.711)
     # exp_settings['lstm_learning_rate'] = 10**-3
-    # exp_settings['value_error_coef'] = 0.3887
+    # exp_settings['value_error_coef'] = 0.75
+
+    # 4a8b24s 1500 epoch noise init 50 percent right mask shuffle 
+    exp_settings['dim_hidden_a2c'] = 77
+    exp_settings['dim_hidden_lstm'] = 77
+    exp_settings['lstm_learning_rate'] = 0.00026
+    exp_settings['value_error_coef'] = 0.73822
+
+
 
     # exp_settings['embedder_learning_rate'] = 1e-5
     # exp_settings['embedding_size'] = 128
-    exp_settings[
-        "entropy_error_coef"
-    ] = 1  # Annealing Entropy values from 1 to 0 linearly over training
+
+    # Annealing Entropy values from 1 to 0 linearly over training
+    exp_settings["entropy_error_coef"] = 1  
 
     # Print out current hyperparams to console
     print("\nNext Run Commencing with the following params:")
@@ -122,12 +131,12 @@ def avg_returns(
 # Bounded region of parameter space
 pbounds = {
     # 'dim_hidden_a2c': (4, 8),               #transformed into 2**x in function
-    "dim_hidden_lstm": (4, 8),  # transformed into 2**x in function
-    # 'embedding_learning_rate': (-5, -3),    #transformed into 10**x in function
-    # 'embedding_size': (4,9),                #transformed into 2**x in function
+    # "dim_hidden_lstm": (4, 9),  # transformed into 2**x in function
+    'embedding_learning_rate': (-5, -3),    #transformed into 10**x in function
+    'embedding_size': (4,9),                #transformed into 2**x in function
     # 'entropy_error_coef': (0, 0.5),
-    "lstm_learning_rate": (-5, -3),  # transformed into 10**x in function
-    "value_error_coef": (0, 0.75),
+    # "lstm_learning_rate": (-5, -3),  # transformed into 10**x in function
+    # "value_error_coef": (0, 0.75),
 }
 
 optimizer = BayesianOptimization(
@@ -136,7 +145,11 @@ optimizer = BayesianOptimization(
     verbose=2,  # verbose = 1 prints only when a maximum is observed, verbose = 0 is silent
     random_state=1,
 )
-log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_300_epochs_entropy_annealed_loss_summed.json"
+# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_l2rl_noisy_bc_init.json"
+# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_1500_epochs_embedder_noisy_bc_50_init.json"
+log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_1500_epochs_embedder1_noisy_bc_50_init.json"
+# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_embedder_entropy_annealed_loss_summed.json"
+# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_300_epochs_entropy_annealed_loss_summed.json"
 # log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_300_epochs.json"
 # log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_600_epochs_arm.json"
 # log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_L2RL.json"

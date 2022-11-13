@@ -104,7 +104,7 @@ def run_experiment_sl(exp_settings):
     entropy_weight = exp_settings["entropy_error_coef"]
 
     # Input is obs/context/reward triplet
-    dim_input_lstm = num_arms + barcode_size + 1
+    dim_input_lstm = num_arms + len(task.cluster_lists[0][0]) + 1
     dim_hidden_lstm = exp_settings["dim_hidden_lstm"]
     learning_rate = exp_settings["lstm_learning_rate"]
 
@@ -204,9 +204,6 @@ def run_experiment_sl(exp_settings):
         # How much noise is needed in the evaluation stages?
         apply_noise = i - exp_settings["epochs"]
         if apply_noise >= 0:
-            # agent.eval()
-            # if exp_settings['mem_store'] == 'embedding':
-            #     agent.dnd.embedder.eval()
             noise_idx = apply_noise // exp_settings["noise_eval_epochs"]
             noise_percent = exp_settings["noise_percent"][noise_idx]
             noise_barcode_flip_locs = int(noise_percent * barcode_size)
@@ -231,6 +228,13 @@ def run_experiment_sl(exp_settings):
                 action = obs[0:num_arms].view(1, -1)
                 original_bc = obs[num_arms:-1].view(1, -1)
                 reward = obs[-1].view(1, -1)
+
+                # No noise, eval phase of model
+                if not exp_settings["noise_type"]:
+                    apply_noise_again = False
+                    noisy_bc = original_bc.detach().clone()
+
+                # Noise applied to BC at beginning of episode
                 while apply_noise_again:
                     apply_noise_again = False
 
@@ -240,55 +244,35 @@ def run_experiment_sl(exp_settings):
                     )
 
                     # Coin Flip to decide whether to flip the values at the indicies
-                    mask = torch.tensor(
-                        [random.randint(0, 1) for _ in idx], device=device
-                    )
-
-                    noisy_bc = original_bc.detach().clone()
-
-                    # Applying the mask to the barcode
-                    for idx1, mask1 in zip(idx, mask):
-                        noisy_bc[0][idx1] = float(torch.ne(mask1, noisy_bc[0][idx1]))
-
-                    # Cosine similarity doesn't like all 0's for matching in memory
-                    if torch.sum(noisy_bc) == 0:
-                        apply_noise_again = True
-
-                while apply_noise_again:
-                    apply_noise_again = False
-
-                    # What indicies need to be randomized?
-                    idx = random.sample(
-                        range(memory.barcode_size), noise_barcode_flip_locs
-                    )
-
-                    # Coin Flip to decide whether to flip the values at the indicies
-                    if not perfect_noise:
+                    if not exp_settings["perfect_noise"]:
                         mask = torch.tensor(
                             [random.randint(0, 1) for _ in idx], device=device
                         )
+
+                    # Always flip the value at the indicies
                     else:
                         mask = torch.tensor([1 for _ in idx], device=device)
 
-                    noisy_bc = real_bc_tensor.detach().clone()
+                    noisy_bc = original_bc.detach().clone()
 
                     # Applying the mask to the barcode at the idx
-                    if apply_noise == "random":
+                    if exp_settings["noise_type"] == "random":
                         for idx1, mask1 in zip(idx, mask):
                             noisy_bc[0][idx1] = float(
                                 torch.ne(mask1, noisy_bc[0][idx1])
                             )
 
-                    # Applying an continuous block starting on the left end of bc
-                    elif apply_noise == "left_mask":
+                    # Applying a continuous block starting on the left end of bc
+                    elif exp_settings["noise_type"] == "left_mask":
                         for idx1, mask1 in enumerate(mask):
                             noisy_bc[0][idx1] = float(
                                 torch.ne(mask1, noisy_bc[0][idx1])
                             )
 
-                    elif apply_noise == "center_mask":
+                    # Applying a continuous block covering the center of bc
+                    elif exp_settings["noise_type"] == "center_mask":
                         # Find center
-                        center = memory.barcode_size // 2
+                        center = exp_settings["barcode_size"] // 2
 
                         # Find edges of window
                         start = center - noise_barcode_flip_locs // 2
@@ -301,15 +285,16 @@ def run_experiment_sl(exp_settings):
                             )
 
                     # Applying an continuous block starting on the right end of bc
-                    elif apply_noise == "right_mask":
+                    elif exp_settings["noise_type"] == "right_mask":
                         for idx1, mask1 in enumerate(mask):
-                            noisy_bc[0][memory.barcode_size - 1 - idx1] = float(
-                                torch.ne(mask1, noisy_bc[0][idx1])
-                            )
+                            loc = exp_settings["barcode_size"] - 1 - idx1
+                            noisy_bc[0][loc] = float(torch.ne(mask1, noisy_bc[0][loc]))
 
-                    # Even distribution of noise
-                    elif apply_noise == "checkerboard":
-                        idx = np.arange(0, memory.barcode_size, int(1 / noise_percent))
+                    # Even distribution of noise across bc
+                    elif exp_settings["noise_type"] == "checkerboard":
+                        idx = np.arange(
+                            0, exp_settings["barcode_size"], int(1 / noise_percent)
+                        )
                         for idx1, mask1 in zip(idx, mask):
                             noisy_bc[0][idx1] = float(
                                 torch.ne(mask1, noisy_bc[0][idx1])
@@ -346,13 +331,6 @@ def run_experiment_sl(exp_settings):
                 else:  # t != 0:
                     input_to_lstm = last_action_output
 
-                # How is the embedder being trained?
-                emb_trainer = (
-                    barcode_id[m]
-                    if exp_settings["embedder_training"] == "barcodes"
-                    else arm_id[m]
-                )
-
                 # What is being stored for Ritter?
                 mem_key = (
                     barcode_tensors[m]
@@ -367,7 +345,7 @@ def run_experiment_sl(exp_settings):
                     input_to_lstm,
                     barcode_strings[m][0][0],
                     mem_key,
-                    emb_trainer,
+                    barcode_id[m],
                     h_t,
                     c_t,
                 )
@@ -530,9 +508,20 @@ def run_experiment_sl(exp_settings):
             keys, prediction_mapping = agent.get_all_mems_embedder()
             log_keys.append(keys)
 
+    # Save model for eval on different noise types
+    if exp_settings['save_model']:
+        torch.save(agent.state_dict(), f"model/{exp_settings['exp_name']}.pt")
+        if exp_settings["mem_store"] == "embedding":
+            torch.save(agent.dnd.embedder.state_dict(), f"model/{exp_settings['exp_name']}_embedder.pt")
+        
+        # Load clusters of barcodes
+        np.savez(f"model/{exp_settings['exp_name']}.npz", cluster_lists = task.cluster_lists)
+
     # Final Results
     start = exp_settings["epochs"]
     eval_len = exp_settings["noise_eval_epochs"]
+    print()
+    print("- - - " * 3)
     for idx, percent in enumerate(exp_settings["noise_percent"]):
         no_noise_eval = np.mean(log_return[start : start + eval_len])
         no_noise_accuracy = np.mean(log_embedder_accuracy[start : start + eval_len])
@@ -584,11 +573,25 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["randomize"] = True
     exp_settings["perfect_info"] = False  # Make arms 100%/0% reward instead of 90%/10%
     exp_settings["torch_device"] = "CPU"  # 'CPU' or 'GPU'
-    exp_settings["load_pretrained_model"] = True
+    exp_settings["load_pretrained_model"] = False
 
     # Task Info
     exp_settings["kernel"] = "cosine"  # Cosine, l2
     exp_settings["mem_store"] = "context"  # Context, embedding, hidden, L2RL
+
+    # Noise Parameters
+    # Always flip bit for noise instead of coin flip chance
+    exp_settings["perfect_noise"] = False
+    exp_settings["noise_type"] = "right_mask"
+    """
+    apply_noise_types = [
+    False,
+    "random",
+    "left_mask",
+    "center_mask",
+    "right_mask",
+    "checkerboard",]
+    """
 
     # Task Size and Length
     exp_settings["num_arms"] = 0
@@ -598,20 +601,16 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["epochs"] = 0
 
     # Task Complexity
-    exp_settings["noise_percent"] = []  # What noise percent to apply during eval phase
-    exp_settings[
-        "noise_eval_epochs"
-    ] = 0  # How long to spend on a single noise percent eval
-    exp_settings[
-        "noise_train_percent"
-    ] = 0  # What noise percent to apply during training, if any
-    exp_settings[
-        "sim_threshold"
-    ] = 0  # Cosine similarity threshold for single clustering
-    exp_settings["hamming_threshold"] = 0  # Hamming distance for multi clustering
-    exp_settings[
-        "embedder_training"
-    ] = ""  # arms or barcodes to train embedding model against
+    # What noise percent to apply during eval phase
+    exp_settings["noise_percent"] = []
+    # How long to spend on a single noise percent eval
+    exp_settings["noise_eval_epochs"] = 0
+    # What noise percent to apply during training, if any
+    exp_settings["noise_train_percent"] = 0
+    # Cosine similarity threshold for single clustering
+    exp_settings["sim_threshold"] = 0
+    # Hamming distance for multi clustering
+    exp_settings["hamming_threshold"] = 0
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
@@ -619,13 +618,13 @@ def run_experiment(exp_base, exp_difficulty):
 
     # Forced Hyperparams (found after multiple passes through Bayesian Optimization)
     exp_settings["torch_device"] = "GPU"
-    exp_settings["dim_hidden_a2c"] = int(2**8.644)  # 400
-    exp_settings["dim_hidden_lstm"] = int(2**8.655)  # 403
-    exp_settings["embedder_learning_rate"] = 10**-3.0399  # 9.1e-4
-    exp_settings["embedding_size"] = int(2**8.629)  # 395
-    exp_settings["entropy_error_coef"] = 0.0391
-    exp_settings["lstm_learning_rate"] = 10**-3.332  # 4.66e-4
-    exp_settings["value_error_coef"] = 0.62
+    # exp_settings["dim_hidden_a2c"] = int(2**8.644)  # 400
+    # exp_settings["dim_hidden_lstm"] = int(2**8.655)  # 403
+    # exp_settings["embedder_learning_rate"] = 10**-3.0399  # 9.1e-4
+    # exp_settings["embedding_size"] = int(2**8.629)  # 395
+    # exp_settings["entropy_error_coef"] = 0.0391
+    # exp_settings["lstm_learning_rate"] = 10**-3.332  # 4.66e-4
+    # exp_settings["value_error_coef"] = 0.62
 
     # # 4a8b24s l2rl optimized and then embedder optimized for returns/accuracy after
     # exp_settings['torch_device'] = 'CPU'
@@ -637,12 +636,29 @@ def run_experiment(exp_base, exp_difficulty):
     # exp_settings['lstm_learning_rate'] = 10**-3
     # exp_settings['value_error_coef'] = 0.3887
 
+    # # 4a8b24s l2rl optim, then emb optim, with noisy bc on init
+    # exp_settings['dim_hidden_a2c'] = 167
+    # exp_settings['dim_hidden_lstm'] = 167
+    # exp_settings['embedder_learning_rate'] = 2e-5
+    # exp_settings['embedding_size'] = 22
+    # exp_settings['entropy_error_coef'] = 1
+    # exp_settings['lstm_learning_rate'] = 0.00012
+    # exp_settings['value_error_coef'] = 0.2874
+
+    # 4a8b24s l2rl optim, then emb optim, with noisy bc right mask on init
+    exp_settings['dim_hidden_a2c'] = 77
+    exp_settings['dim_hidden_lstm'] = 77
+    exp_settings['lstm_learning_rate'] = 0.00026
+    exp_settings['embedding_size'] = 103
+    exp_settings['embedder_learning_rate'] = 6e-05
+    exp_settings['entropy_error_coef'] = 1
+    exp_settings['value_error_coef'] = 0.73822
+
     # Experimental Variables
     (
         mem_store_types,
         exp_settings["epochs"],
         exp_settings["noise_eval_epochs"],
-        exp_settings["embedder_training"],
         exp_settings["noise_train_percent"],
         num_repeats,
         file_loc,
@@ -672,6 +688,7 @@ def run_experiment(exp_base, exp_difficulty):
     assert (
         exp_settings["num_barcodes"] <= 32
     ), "Too many distinct barcodes to display with current selection of labels in T-SNE"
+    assert (exp_settings['num_barcodes']%exp_settings['num_arms'] == 0), "Number of barcodes must be a multiple of number of arms"
 
     ### Beginning of Experimental Runs ###
     epoch_info = np.array(
@@ -680,7 +697,7 @@ def run_experiment(exp_base, exp_difficulty):
             exp_settings["noise_eval_epochs"],
             exp_settings["noise_percent"],
             num_repeats,
-            exp_settings["embedder_training"],
+            exp_settings['noise_type']
         ],
         dtype=object,
     )
@@ -691,6 +708,7 @@ def run_experiment(exp_base, exp_difficulty):
         tot_acc = np.zeros(exp_length)
         exp_settings["mem_store"] = mem_store
         exp_name = exp_size + exp_other + f"_{exp_settings['mem_store']}"
+        exp_settings["exp_name"] = exp_name
 
         for i in range(num_repeats):
             print(f"\nNew Run --> Iteration: {i} | Exp: {exp_name}")
@@ -700,7 +718,9 @@ def run_experiment(exp_base, exp_difficulty):
                 i == num_repeats - 1 and exp_settings["epochs"] >= 200
             )
 
-            exp_settings["exp_name"] = exp_name
+            # Save model for future noise evals of different types
+            exp_settings['save_model'] = (i == 0)
+
             logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
             log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
             log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
@@ -712,11 +732,12 @@ def run_experiment(exp_base, exp_difficulty):
 
         if exp_length >= 200:
             if exp_settings["epochs"] < 25:
-                exp_name += "noise_eval"
-            # Keys will be tensors, and will save keys from only the first run of a repeated run to capture training data
+                exp_name += "_noise_eval"
+
+            # Keys will be tensors, and will save keys from only the last run of a repeated run to capture training data
             torch.save(log_keys, "..\\Mem_Store_Project\\data\\" + exp_name + ".pt")
 
-            # Logs will be numpy arrays of returns, accuracy, BC->Arm maps, and exp_info
+            # Logs will be numpy arrays of returns, accuracy, BC->Arm maps (for the last run of a repetition), and epoch_info
             np.savez(
                 "..\\Mem_Store_Project\\data\\" + exp_name,
                 tot_rets=tot_rets,

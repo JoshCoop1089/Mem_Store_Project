@@ -257,7 +257,16 @@ class ContextualBandit:
 
                 if not new_seed_needed:
                     # Need to store individual cluster for arm reshuffling at every epoch
-                    cluster_list = list(mini_cluster_bag)
+                    unnoised_cluster_list = list(mini_cluster_bag)
+                    # print(unnoised_cluster_list)
+
+                    # Append noise onto end of barcode to test model understanding of important features
+                    cluster_list = [""]*len(unnoised_cluster_list)
+                    for idx, barcode in enumerate(unnoised_cluster_list):
+                        np_noise = np.random.randint(0, 2, self.barcode_size)
+                        noise = np.array2string(np_noise)[1:-1].replace(" ", "").replace("\n", "")
+                        cluster_list[idx] = barcode + noise
+                    # print(cluster_list)
                     self.cluster_lists.append(cluster_list)
                     cluster_mapping = self.map_arms_to_barcodes(
                         barcode_list=cluster_list
@@ -357,7 +366,7 @@ class ContextualBandit:
         )
         rewards = np.zeros((self.num_barcodes**2, self.pulls_per_episode, 1))
         barcodes = np.zeros(
-            (self.num_barcodes**2, self.pulls_per_episode, self.barcode_size)
+            (self.num_barcodes**2, self.pulls_per_episode, len(self.cluster_lists[0][0]))
         )
         barcodes_strings = np.zeros(
             (self.num_barcodes**2, self.pulls_per_episode, 1), dtype=object
@@ -422,7 +431,7 @@ class ContextualBandit:
 
         # Tile the barcode for all pulls in the episode
         bar_strings = np.zeros((self.pulls_per_episode, 1), dtype=object)
-        bar_ar = np.zeros((self.pulls_per_episode, self.barcode_size))
+        bar_ar = np.zeros((self.pulls_per_episode, len(self.cluster_lists[0][0])))
         for num in range(self.pulls_per_episode):
             bar_strings[num] = barcode
             for id, val in enumerate(barcode):
