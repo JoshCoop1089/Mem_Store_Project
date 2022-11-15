@@ -17,10 +17,10 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 # Experiment Type and Length
 #context, embedding, hidden, L2RL
 #
-exp_types = ['context', 'embedding','hidden', 'L2RL']
+# exp_types = ['context', 'embedding','hidden', 'L2RL']
 # exp_types = ['context', 'hidden', 'L2RL']
 # exp_types = ['context', 'embedding']
-# exp_types = ['context']
+exp_types = ['context']
 # exp_types = ['embedding']
 # exp_types = ['embedding', 'hidden', 'L2RL']
 # exp_types = ['hidden']
@@ -28,8 +28,8 @@ try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
-training_epochs = 0
-noise_epochs = 150
+training_epochs = 30
+noise_epochs = 10
 noise_train_percent = 0
 
 # Experiment Difficulty
@@ -42,16 +42,17 @@ pulls_per_episode = 10
 noise_percent = [0, 0.25, 0.5, 0.75]
 noise_types = [
     # False,
-    "random",
-    "left_mask",
-    "center_mask",
+    # "random",
+    # "left_mask",
+    # "center_mask",
     "right_mask",
-    "checkerboard",]
+    # "checkerboard",
+    ]
 
 # noise_percent = [0]
 
 # Randomized seed changes to average for returns graph
-num_repeats = 5
+num_repeats = 1
 
 # Modify this to fit your machines save paths
 figure_save_location = "..\\Mem_Store_Project\\figs\\"

@@ -44,11 +44,22 @@ def plot_tsne_distribution(
     tx = scale_to_01_range(tx)
     ty = scale_to_01_range(ty)
 
-    checker = list(mapping.keys())[0]
     cluster_id = {k: 0 for k in mapping.keys()}
-    for c_id in mapping.keys():
-        if hamming_distance(c_id, checker) > 3:
-            cluster_id[c_id] = 1
+    for loc_id, c_id in enumerate(mapping.keys()):
+        cluster_id[c_id] = loc_id//(len(mapping.keys())//2)
+
+    # Find avg hamming distance given cluster id
+    ham_avg = [0]*(2)
+    clusters = [[],[]]
+    for bc, c_id in cluster_id.items():
+        clusters[c_id].append(bc)
+    for c_id, cluster in enumerate(clusters):
+        for bc in cluster:
+            for bc1 in cluster:
+                ham_avg[c_id] += hamming_distance(bc, bc1)
+    
+    # ham_avg [x/len(mapping.keys())/2)**2 for x in ham_avg]
+    print(ham_avg)
 
     # Seperate by barcode
     classes = {k: [] for k in mapping.keys()}
@@ -137,11 +148,11 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
 
 
     # LOWESS Smoothed Graphs
-    frac = 0.05
+    frac = 0.03
     marker_list = ["dashdot", "solid", (0, (3, 1, 1)), "dashed"]
     for idx_mem, mem_store in enumerate(mem_store_types):
         exp_name1 = "..\\Mem_Store_Project\\data\\" + exp_name + f"_{mem_store}"
-        exp_name1 += f"_{noise_type}_noise_eval"
+        # exp_name1 += f"_{noise_type}_noise_eval"
         exp_name1 += ".npz"
 
         # Returns
@@ -372,43 +383,56 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
     exp_name1 = exp_size + exp_other
 
     exp_name = "..\\Mem_Store_Project\\data\\" + exp_name1 + "_" + mem_store_types
+    # exp_name += f"_{noise_type}_noise_eval"
+    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+    all_keys = torch.load(exp_name + ".pt", map_location = device)
 
-    # There will be many key chunks stored in torch.load(key_file)
-    # Initial, 33%, 66%, 100% Training View
-    train = [0, 33, 66, 100]
-    f, axes = plt.subplots(1, 4, figsize=(20, 6))
-    all_keys = torch.load(exp_name + ".pt")
+    if mem_store_types != "L2RL":
+        title = mem_store_types.capitalize()
+    else:
+        title = "Hidden (L2RL)"
+
     epoch_mapping = np.load(exp_name + ".npz", allow_pickle=True)[
         "epoch_mapping"
     ].reshape((1, 1))
     epoch_mapping = epoch_mapping[0][0]
-    for idx_mem, memory in enumerate(all_keys[0:4]):
-        # T-SNE to visualize keys in memory
-        embeddings = [x[0] for x in memory]
-        labels = [x[1] for x in memory]
 
-        # Artifically boost datapoint count to make tsne nicer
-        while len(embeddings) < 100:
-            embeddings.extend(embeddings)
-            labels.extend(labels)
+    # There will be many key chunks stored in torch.load(key_file)
+    if np.load(exp_name+".npz",allow_pickle=True)["epoch_info"][0] != 0:
+        # Initial, 33%, 66%, 100% Training View
+        train = [0, 33, 66, 100]
+        f, axes = plt.subplots(1, 4, figsize=(20, 6))
+        for idx_mem, memory in enumerate(all_keys[0:4]):
+            # T-SNE to visualize keys in memory
+            embeddings = [x[0] for x in memory]
+            labels = [x[1] for x in memory]
 
-        f, axes = plot_tsne_distribution(
-            embeddings, labels, epoch_mapping, f, axes, idx_mem, color_by
-        )
-        axes[idx_mem].xaxis.set_visible(False)
-        axes[idx_mem].yaxis.set_visible(False)
-        axes[idx_mem].set_title(f"{train[idx_mem]}%")
+            # Artifically boost datapoint count to make tsne nicer
+            while len(embeddings) < 100:
+                embeddings.extend(embeddings)
+                labels.extend(labels)
+
+            f, axes = plot_tsne_distribution(
+                embeddings, labels, epoch_mapping, f, axes, idx_mem, color_by
+            )
+            axes[idx_mem].xaxis.set_visible(False)
+            axes[idx_mem].yaxis.set_visible(False)
+            axes[idx_mem].set_title(f"{train[idx_mem]}%")
+
+        num_noise_evals = max(len(all_keys[4:]), 2)
+        key_start = 4
+
+        f.suptitle(exp_name1 + f"_{title}: Colored by {color_by}")
+        f.tight_layout()
+    else:
+        num_noise_evals = len(all_keys)
+        key_start = 0
 
     # Keys for the end of every noise eval epoch
-    num_noise_evals = max(len(all_keys[4:]), 2)
     f1, axes1 = plt.subplots(1, num_noise_evals, figsize=(5 * num_noise_evals, 6))
     exp_noise = np.load(exp_name + ".npz", allow_pickle=True)["epoch_info"][2]
-    try:
-        emb_trained = np.load(exp_name + ".npz", allow_pickle=True)["epoch_info"][4]
-    except:
-        emb_trained = "barcodes"
 
-    for idx_mem, memory in enumerate(all_keys[4:]):
+    for idx_mem, memory in enumerate(all_keys[key_start:]):
         # T-SNE to visualize keys in memory
         embeddings = [x[0] for x in memory]
         labels = [x[1] for x in memory]
@@ -427,16 +451,8 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
             f"{int(exp_settings['barcode_size']*exp_noise[idx_mem])} Bits Noisy"
         )
 
-    if mem_store_types != "L2RL":
-        title = mem_store_types.capitalize()
-        if mem_store_types == "embedding":
-            title += f"_{emb_trained}"
-    else:
-        title = "Hidden (L2RL)"
-    f.suptitle(exp_name1 + f"_{title}: Colored by {color_by}")
     f1.suptitle(exp_name1 + f"_{title}: Colored by {color_by}")
 
-    f.tight_layout()
     f1.tight_layout()
     plt.show()
 
@@ -446,10 +462,11 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
         exp_title = (
             file_loc + exp_name1 + f"_{mem_store_types}_train_tsne_{color_by}" + ".png"
         )
+        f.savefig(exp_title)
+    if exp_len[1] > 50:
         exp_title1 = (
             file_loc + exp_name1 + f"_{mem_store_types}_noise_tsne_{color_by}" + ".png"
         )
-        f.savefig(exp_title)
         f1.savefig(exp_title1)
 
 
@@ -534,14 +551,15 @@ def graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by):
 
 if __name__ == "__main__":
     # exp_types = ['embedding']
+    exp_types = ['context']
     # exp_types = ['context', 'embedding']
     # exp_types = ['context', 'hidden', 'L2RL']
     # exp_types = ['embedding', 'hidden', 'L2RL']
     exp_types = ["context", "embedding", "hidden", "L2RL"]
 
     # Experiment Difficulty
-    num_arms = 4
-    num_barcodes = 8
+    num_arms = 6
+    num_barcodes = 12
     barcode_size = 24
     noise_train_percent = 0
     hamming_clustering = 1  # Create evenly distributed clusters based on arms/barcodes
@@ -549,9 +567,9 @@ if __name__ == "__main__":
 
     noise_types = [
     # False,
-    "random",
-    "left_mask",
-    "center_mask",
+    # "random",
+    # "left_mask",
+    # "center_mask",
     "right_mask",
     # "checkerboard",
     ]
@@ -576,13 +594,13 @@ if __name__ == "__main__":
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
         # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
         # for mem_type in exp_types:
-        #     exp_base = mem_type, figure_save_location
+        #     exp_base = mem_type, noise_type, figure_save_location
         #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
 
-        # exp_base = exp_types, figure_save_location
-        # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')
+        # exp_base = exp_types, noise_type, figure_save_location
+        # # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')
         # for mem_type in exp_types:
-        #     exp_base = mem_type, figure_save_location
+        #     exp_base = mem_type, noise_type, figure_save_location
         #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'cluster')
 
         # barcode_size = [16,24]

@@ -584,7 +584,7 @@ def run_experiment(exp_base, exp_difficulty):
 
     # Noise Parameters
     # Always flip bit for noise instead of coin flip chance
-    exp_settings["perfect_noise"] = False
+    exp_settings["perfect_noise"] = True
     exp_settings["noise_type"] = "right_mask"
     """
     apply_noise_types = [
