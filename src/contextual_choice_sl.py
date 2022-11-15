@@ -128,6 +128,7 @@ def run_experiment_sl(exp_settings):
         task.cluster_lists = np.load(f"model/{exp_settings['exp_name']}.npz")[
             "cluster_lists"
         ].tolist()
+        print("--> Model loaded from disk <--")
 
     # Timing
     run_time = np.zeros(
@@ -175,8 +176,9 @@ def run_experiment_sl(exp_settings):
     for i in range(n_epochs):
 
         # Anneal Entropy from 1 down to 0 over course of training
-        if exp_settings["entropy_error_coef"] == 1:
-            entropy_weight = (exp_settings["epochs"] - i) / exp_settings["epochs"]
+        if exp_settings["entropy_error_coef"] == 1 and exp_settings['epochs'] != 0:
+            # entropy_weight = (i - exp_settings["epochs"]) / exp_settings["epochs"]
+            entropy_weight = (exp_settings["epochs"]-i) / exp_settings["epochs"]
 
         time_start = time.perf_counter()
 
@@ -198,7 +200,7 @@ def run_experiment_sl(exp_settings):
         # Training with noise on?
         if exp_settings["noise_train_percent"] > 0:
             noise_barcode_flip_locs = int(
-                exp_settings["noise_train_percent"] * barcode_size
+                exp_settings["noise_train_percent"] * len(task.cluster_lists[0][0])
             )
 
         # How much noise is needed in the evaluation stages?
@@ -206,7 +208,7 @@ def run_experiment_sl(exp_settings):
         if apply_noise >= 0:
             noise_idx = apply_noise // exp_settings["noise_eval_epochs"]
             noise_percent = exp_settings["noise_percent"][noise_idx]
-            noise_barcode_flip_locs = int(noise_percent * barcode_size)
+            noise_barcode_flip_locs = int(noise_percent * len(task.cluster_lists[0][0]))
 
         # loop over the training set
         for m in range(episodes_per_epoch):
@@ -240,7 +242,8 @@ def run_experiment_sl(exp_settings):
 
                     # What indicies need to be randomized?
                     idx = random.sample(
-                        range(exp_settings["barcode_size"]), noise_barcode_flip_locs
+                        range(
+                            len(task.cluster_lists[0][0])), noise_barcode_flip_locs
                     )
 
                     # Coin Flip to decide whether to flip the values at the indicies
@@ -272,7 +275,7 @@ def run_experiment_sl(exp_settings):
                     # Applying a continuous block covering the center of bc
                     elif exp_settings["noise_type"] == "center_mask":
                         # Find center
-                        center = exp_settings["barcode_size"] // 2
+                        center = len(task.cluster_lists[0][0]) // 2
 
                         # Find edges of window
                         start = center - noise_barcode_flip_locs // 2
@@ -287,13 +290,13 @@ def run_experiment_sl(exp_settings):
                     # Applying an continuous block starting on the right end of bc
                     elif exp_settings["noise_type"] == "right_mask":
                         for idx1, mask1 in enumerate(mask):
-                            loc = exp_settings["barcode_size"] - 1 - idx1
+                            loc = len(task.cluster_lists[0][0]) - 1 - idx1
                             noisy_bc[0][loc] = float(torch.ne(mask1, noisy_bc[0][loc]))
 
                     # Even distribution of noise across bc
                     elif exp_settings["noise_type"] == "checkerboard":
                         idx = np.arange(
-                            0, exp_settings["barcode_size"], int(1 / noise_percent)
+                            0, len(task.cluster_lists[0][0]), int(1 / noise_percent)
                         )
                         for idx1, mask1 in zip(idx, mask):
                             noisy_bc[0][idx1] = float(
@@ -617,7 +620,7 @@ def run_experiment(exp_base, exp_difficulty):
     ### End of Experimental Parameters ###
 
     # Forced Hyperparams (found after multiple passes through Bayesian Optimization)
-    exp_settings["torch_device"] = "GPU"
+    exp_settings["torch_device"] = "CPU"
     # exp_settings["dim_hidden_a2c"] = int(2**8.644)  # 400
     # exp_settings["dim_hidden_lstm"] = int(2**8.655)  # 403
     # exp_settings["embedder_learning_rate"] = 10**-3.0399  # 9.1e-4
@@ -660,6 +663,7 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["epochs"],
         exp_settings["noise_eval_epochs"],
         exp_settings["noise_train_percent"],
+        exp_settings['noise_type'],
         num_repeats,
         file_loc,
     ) = exp_base
@@ -701,6 +705,10 @@ def run_experiment(exp_base, exp_difficulty):
         ],
         dtype=object,
     )
+
+    # Load a pretrained model if there are no training epochs
+    exp_settings['load_pretrained_model'] = (exp_settings['epochs'] == 0)
+
     exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
     exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n"
     for idx_mem, mem_store in enumerate(mem_store_types):
@@ -711,7 +719,8 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["exp_name"] = exp_name
 
         for i in range(num_repeats):
-            print(f"\nNew Run --> Iteration: {i} | Exp: {exp_name}")
+            print(
+                f"\nNew Run --> Iteration: {i} | Exp: {exp_name} | Noise: {exp_settings['noise_type']}")
 
             # Save tensorboard returns, accuracy, and r-gates for last run of long tests
             exp_settings["tensorboard_logging"] = (
@@ -719,7 +728,7 @@ def run_experiment(exp_base, exp_difficulty):
             )
 
             # Save model for future noise evals of different types
-            exp_settings['save_model'] = (i == 0)
+            exp_settings['save_model'] = (i == 0 and not exp_settings['load_pretrained_model'])
 
             logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
             log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
@@ -732,14 +741,16 @@ def run_experiment(exp_base, exp_difficulty):
 
         if exp_length >= 200:
             if exp_settings["epochs"] < 25:
-                exp_name += "_noise_eval"
+                exp_name += f"_{exp_settings['noise_type']}_noise_eval"
 
             # Keys will be tensors, and will save keys from only the last run of a repeated run to capture training data
-            torch.save(log_keys, "..\\Mem_Store_Project\\data\\" + exp_name + ".pt")
+            torch.save(log_keys, "..\\Mem_Store_Project\\data\\" + exp_name + ".pt")    #win
+            # torch.save(log_keys, "..//Mem_Store_Project//data//" + exp_name + ".pt")  #ilab
 
             # Logs will be numpy arrays of returns, accuracy, BC->Arm maps (for the last run of a repetition), and epoch_info
             np.savez(
-                "..\\Mem_Store_Project\\data\\" + exp_name,
+                "..\\Mem_Store_Project\\data\\" + exp_name,     #win
+                # "..//Mem_Store_Project//data//" + exp_name,   #ilab
                 tot_rets=tot_rets,
                 tot_acc=tot_acc,
                 epoch_mapping=epoch_mapping,
