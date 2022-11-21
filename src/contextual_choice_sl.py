@@ -76,6 +76,7 @@ def run_experiment_sl(exp_settings):
 
     # Cluster barcodes at the start (Only use one per experiment)
     sim_threshold = exp_settings["sim_threshold"]
+    noise_train_percent = exp_settings['noise_train_percent']
     hamming_threshold = exp_settings["hamming_threshold"]
     assert (hamming_threshold == 0) or (
         hamming_threshold > 0 and 3 * hamming_threshold < barcode_size
@@ -91,7 +92,7 @@ def run_experiment_sl(exp_settings):
         num_arms,
         num_barcodes,
         barcode_size,
-        sim_threshold,
+        noise_train_percent,
         hamming_threshold,
         device,
         perfect_info,
@@ -295,13 +296,14 @@ def run_experiment_sl(exp_settings):
 
                     # Even distribution of noise across bc
                     elif exp_settings["noise_type"] == "checkerboard":
-                        idx = np.arange(
-                            0, len(task.cluster_lists[0][0]), int(1 / noise_percent)
-                        )
-                        for idx1, mask1 in zip(idx, mask):
-                            noisy_bc[0][idx1] = float(
-                                torch.ne(mask1, noisy_bc[0][idx1])
+                        if noise_percent != 0:
+                            idx = np.arange(
+                                0, len(task.cluster_lists[0][0]), int(1 / noise_percent)
                             )
+                            for idx1, mask1 in zip(idx, mask):
+                                noisy_bc[0][idx1] = float(
+                                    torch.ne(mask1, noisy_bc[0][idx1])
+                                )
 
                     # Cosine similarity doesn't like all 0's for matching in memory
                     if torch.sum(noisy_bc) == 0:
@@ -419,7 +421,7 @@ def run_experiment_sl(exp_settings):
                     # Embedder Loss for Episode
                     a_dnd = agent.dnd
                     loss_vals = [x[2] for x in a_dnd.trial_buffer]
-                    episode_loss = torch.stack(loss_vals).mean()
+                    episode_loss = torch.stack(loss_vals).sum()
                     a_dnd.embedder_loss[i] += episode_loss / episodes_per_epoch
 
                     # Unfreeze Embedder
@@ -529,7 +531,7 @@ def run_experiment_sl(exp_settings):
         no_noise_eval = np.mean(log_return[start : start + eval_len])
         no_noise_accuracy = np.mean(log_embedder_accuracy[start : start + eval_len])
         print(
-            f"Noise: {int(100*percent)}%  \t| Returns: {round(no_noise_eval,3)} | Accuracy: {round(no_noise_accuracy,3)}"
+            f"Noise: {int(100*percent)}%\t| Bits: {int(percent*len(task.cluster_lists[0][0]))}\t| Returns: {round(no_noise_eval,3):0.3} \t| Accuracy: {round(no_noise_accuracy,3)}"
         )
         start += eval_len
 
@@ -584,7 +586,7 @@ def run_experiment(exp_base, exp_difficulty):
 
     # Noise Parameters
     # Always flip bit for noise instead of coin flip chance
-    exp_settings["perfect_noise"] = True
+    exp_settings["perfect_noise"] = False
     exp_settings["noise_type"] = "right_mask"
     """
     apply_noise_types = [
@@ -629,33 +631,35 @@ def run_experiment(exp_base, exp_difficulty):
     # exp_settings["lstm_learning_rate"] = 10**-3.332  # 4.66e-4
     # exp_settings["value_error_coef"] = 0.62
 
-    # # 4a8b24s l2rl optimized and then embedder optimized for returns/accuracy after
-    # exp_settings['torch_device'] = 'CPU'
-    # exp_settings['dim_hidden_a2c'] = int(2**6.5423)
-    # exp_settings['dim_hidden_lstm'] = int(2**6.5423)
-    # exp_settings['embedder_learning_rate'] = 10**-3
-    # exp_settings['embedding_size'] = int(2**5.8577)
-    # exp_settings['entropy_error_coef'] = 1
-    # exp_settings['lstm_learning_rate'] = 10**-3
-    # exp_settings['value_error_coef'] = 0.3887
+    # Task Size specific hyperparams
+    # Bayes Opt to mazimize L2RL then Bayes on embedder params
 
-    # # 4a8b24s l2rl optim, then emb optim, with noisy bc on init
-    # exp_settings['dim_hidden_a2c'] = 167
-    # exp_settings['dim_hidden_lstm'] = 167
-    # exp_settings['embedder_learning_rate'] = 2e-5
-    # exp_settings['embedding_size'] = 22
-    # exp_settings['entropy_error_coef'] = 1
-    # exp_settings['lstm_learning_rate'] = 0.00012
-    # exp_settings['value_error_coef'] = 0.2874
+    # 4a8b24s, with noisy bc right mask on init
+    exp_settings['dim_hidden_a2c'] = int(2**7.772)
+    exp_settings['dim_hidden_lstm'] = int(2**7.772)
+    exp_settings['lstm_learning_rate'] = 10**-3.089
+    exp_settings['embedding_size'] = int(2**6.236)
+    exp_settings['embedder_learning_rate'] = 10**-3.2246
+    exp_settings['value_error_coef'] = 0.5986
+    exp_settings["entropy_error_coef"] = 0.0368
 
-    # 4a8b24s l2rl optim, then emb optim, with noisy bc right mask on init
-    exp_settings['dim_hidden_a2c'] = 77
-    exp_settings['dim_hidden_lstm'] = 77
-    exp_settings['lstm_learning_rate'] = 0.00026
-    exp_settings['embedding_size'] = 103
-    exp_settings['embedder_learning_rate'] = 6e-05
-    exp_settings['entropy_error_coef'] = 1
-    exp_settings['value_error_coef'] = 0.73822
+    # # 6a12b24s, with noisy bc right mask on init
+    # exp_settings['dim_hidden_a2c'] = int(2**6.597)
+    # exp_settings['dim_hidden_lstm'] = int(2**6.597)
+    # exp_settings['lstm_learning_rate'] = 10**-3.8705
+    # exp_settings['embedding_size'] = int(2**5.7278)
+    # exp_settings['embedder_learning_rate'] = 10**-4.6275
+    # exp_settings['value_error_coef'] = 0.4878
+    # exp_settings["entropy_error_coef"] = 0.0134
+
+    # # 8a16b24s, with noisy bc right mask on init
+    # exp_settings['dim_hidden_a2c'] = int(2**8.9765)
+    # exp_settings['dim_hidden_lstm'] = int(2**8.9765)
+    # exp_settings['lstm_learning_rate'] = 10**-3.3663
+    # exp_settings['value_error_coef'] = 0.0335
+    # exp_settings["entropy_error_coef"] = 0.1626
+    # exp_settings['embedding_size'] = int(2**4.4617)
+    # exp_settings['embedder_learning_rate'] = 10**-4.7065
 
     # Experimental Variables
     (

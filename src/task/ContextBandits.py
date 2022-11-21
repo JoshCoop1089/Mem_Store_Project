@@ -58,7 +58,7 @@ class ContextualBandit:
         num_arms,
         num_barcodes,
         barcode_size,
-        sim_threshold,
+        noise_threshold,
         hamming_threshold,
         device,
         perfect_info=False,
@@ -78,7 +78,7 @@ class ContextualBandit:
         self.perfect_info = perfect_info
 
         # Arm Clustering (Forcing barcodes to be close to each other, measured by cosine similarity)
-        self.sim_threshold = sim_threshold
+        self.noise_threshold = noise_threshold
         self.hamming_threshold = hamming_threshold
 
         # This is assuming clustering of 1 around seed barcodes, probably should change this in the future
@@ -262,8 +262,10 @@ class ContextualBandit:
 
                     # Append noise onto end of barcode to test model understanding of important features
                     cluster_list = [""]*len(unnoised_cluster_list)
+                    assert 0 <= self.noise_threshold < 1
+                    noise_added = int(self.barcode_size * self.noise_threshold)
                     for idx, barcode in enumerate(unnoised_cluster_list):
-                        np_noise = np.random.randint(0, 2, self.barcode_size)
+                        np_noise = np.random.randint(0, 2, noise_added)
                         noise = np.array2string(np_noise)[1:-1].replace(" ", "").replace("\n", "")
                         cluster_list[idx] = barcode + noise
                     # print(cluster_list)

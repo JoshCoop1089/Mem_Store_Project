@@ -20,17 +20,17 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 # exp_types = ['context', 'embedding','hidden', 'L2RL']
 # exp_types = ['context', 'hidden', 'L2RL']
 # exp_types = ['context', 'embedding']
-exp_types = ['context']
-# exp_types = ['embedding']
+# exp_types = ['context']
+exp_types = ['embedding']
 # exp_types = ['embedding', 'hidden', 'L2RL']
 # exp_types = ['hidden']
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
-training_epochs = 30
-noise_epochs = 10
-noise_train_percent = 0
+training_epochs = 500
+noise_epochs = 50
+noise_train_percent = 0.25
 
 # Experiment Difficulty
 hamming_clustering = 1     #Create evenly distributed clusters based on arms/barcodes
