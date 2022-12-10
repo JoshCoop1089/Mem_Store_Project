@@ -8,3 +8,6 @@ runs
 data
 .vscode
 random_tests.py
+bayesian_opt.py
+contextual_choice_sl.py
+experiment_run.py

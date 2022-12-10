@@ -59,6 +59,7 @@ class ContextualBandit:
         num_barcodes,
         barcode_size,
         noise_threshold,
+        noise_type,
         hamming_threshold,
         device,
         perfect_info=False,
@@ -77,8 +78,13 @@ class ContextualBandit:
         self.barcode_size = barcode_size
         self.perfect_info = perfect_info
 
-        # Arm Clustering (Forcing barcodes to be close to each other, measured by cosine similarity)
+        # Arm Clustering (Forcing barcodes to be close to each other, measured by hamming distance)
+        # Noise Assertions
+        assert 0 <= noise_threshold < 1, "Noise should be a decimal value from [0,1)"
+        assert noise_type in ['right_mask', 'left_mask', 'none'], "Noise location must be right_mask, left_mask, or none"
+
         self.noise_threshold = noise_threshold
+        self.noise_type = noise_type
         self.hamming_threshold = hamming_threshold
 
         # This is assuming clustering of 1 around seed barcodes, probably should change this in the future
@@ -267,7 +273,12 @@ class ContextualBandit:
                     for idx, barcode in enumerate(unnoised_cluster_list):
                         np_noise = np.random.randint(0, 2, noise_added)
                         noise = np.array2string(np_noise)[1:-1].replace(" ", "").replace("\n", "")
-                        cluster_list[idx] = barcode + noise
+                        if self.noise_type == 'right_mask':
+                            cluster_list[idx] = barcode + noise
+                        elif self.noise_type == 'left_mask':
+                            cluster_list[idx] = noise + barcode
+                        elif self.noise_type == 'none':
+                            cluster_list[idx] = barcode
                     # print(cluster_list)
                     self.cluster_lists.append(cluster_list)
                     cluster_mapping = self.map_arms_to_barcodes(

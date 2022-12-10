@@ -1,17 +1,17 @@
+import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-import torch
 
 # Win64bit Optimizations for TSNE
 from sklearn.manifold import TSNE
 from sklearnex import patch_sklearn
-
 patch_sklearn()
+
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from warnings import simplefilter
 # ignore all future warnings from sklearn tsne
+from warnings import simplefilter
 simplefilter(action='ignore', category=FutureWarning)
 
 ### Graphing Helper Functions ###
@@ -134,7 +134,7 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
 
     # Experimental Variables
     exp_settings = {}
-    mem_store_types, noise_type, file_loc = exp_base
+    mem_store_types, noise_type, file_loc, noise_eval = exp_base
     (
         exp_settings["hamming_threshold"],
         exp_settings["num_arms"],
@@ -151,11 +151,12 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
 
 
     # LOWESS Smoothed Graphs
-    frac = 0.03
+    frac = 0.05
     marker_list = ["dashdot", "solid", (0, (3, 1, 1)), (0,(2,1,2))]
     for idx_mem, mem_store in enumerate(mem_store_types):
         exp_name1 = "..\\Mem_Store_Project\\data\\" + exp_name + f"_{mem_store}"
-        exp_name1 += f"_{noise_type}_noise_eval"
+        if noise_eval:
+            exp_name1 += f"_{noise_type}_noise_eval"
         exp_name1 += ".npz"
 
         # Returns
@@ -208,7 +209,7 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
     graph_title = f""" --- {graph_type} averaged over {num_repeats} runs ---
     Arms: {exp_settings['num_arms']} | Unique Barcodes: {exp_settings['num_barcodes']} | Barcode Dim: {exp_settings['barcode_size']}
     LOWESS: {min(frac, use_lowess)} | {cluster_info}
-    Noise Applied: {noise_type}
+    Noise Applied: {noise_type} | Noise Trained: {int(exp_settings["noise_train_percent"]*exp_settings['barcode_size'])} bits
     """
 
     # Noise Partitions
@@ -248,7 +249,7 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
 
     # Graph Saving
     if len(data) >= 200:
-        exp_title = file_loc + exp_name + f"{noise_type}_{num_repeats}r_{graph_type}" + ".png"
+        exp_title = file_loc + exp_name + f"_{noise_type}_{num_repeats}r_{graph_type}" + ".png"
         f.savefig(exp_title)
 
 
@@ -282,10 +283,12 @@ def graph_multi_noise_types(exp_base, exp_difficulty, graph_type, use_lowess=Tru
             try:
                 # Returns
                 if graph_type == "Returns":
+                    axes.set_ylim([0.1, 0.9])
                     data = np.load(exp_name1)["tot_rets"]
 
                 # Accuracy
                 elif graph_type == "Accuracy":
+                    axes.set_ylim([0, 1])
                     data = np.load(exp_name1)["tot_acc"]
             except:
                 continue
@@ -455,6 +458,7 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
         axes1[idx_mem].yaxis.set_visible(False)
         axes1[idx_mem].set_title(
             f"{int(exp_settings['barcode_size']*exp_noise[idx_mem])} Bits Noisy"
+            # f"{int(exp_settings['barcode_size']*exp_settings['noise_train_percent']*exp_noise[idx_mem])} Bits Noisy"
         )
 
     f1.suptitle(exp_name1 + f"_{title}: Colored by {color_by}")
@@ -556,9 +560,13 @@ def graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by):
 
 
 if __name__ == "__main__":
-    # exp_types = ['embedding']
+    exp_types = ['embedding']
     # exp_types = ['context']
-    exp_types = ['context', 'embedding']
+    # exp_types = ['context', 'embedding']
+    # exp_types = ['context', 'L2RL']
+    # exp_types = ['context', 'embedding', 'L2RL']
+    # exp_types = ['hidden', 'L2RL']
+    # exp_types = ['context', 'embedding', 'L2RL']
     # exp_types = ['context', 'hidden', 'L2RL']
     # exp_types = ['embedding', 'hidden', 'L2RL']
     # exp_types = ["context", "embedding", "hidden", "L2RL"]
@@ -570,22 +578,26 @@ if __name__ == "__main__":
     noise_train_percent = 0.25
     hamming_clustering = 1  # Create evenly distributed clusters based on arms/barcodes
     sim_threshold = 0  # Create one cluster regardless of arms/barcodes
-
+    noise_train_type = "right_mask"
+    # noise_train_type = "left_mask"
+    # noise_train_type = "none"
     noise_types = [
     # False,
-    "random",
-    "left_mask",
-    "center_mask",
+    # "random",
+    # "left_mask",
+    # "center_mask",
     "right_mask",
     # "checkerboard",
     ]
+    noise_eval = True
+    # noise_eval = False
 
     # Modify this to fit your machines save paths
     figure_save_location = "..\\Mem_Store_Project\\figs\\"
     ###### NO MORE CHANGES!!!!!!!! ##########
 
     for noise_type in noise_types:
-        exp_base = exp_types, noise_type, figure_save_location
+        exp_base = exp_types, noise_type, figure_save_location, noise_eval
         exp_difficulty = (
             hamming_clustering,
             num_arms,

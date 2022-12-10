@@ -21,8 +21,10 @@ def avg_returns(
     ### Experimental Parameters ###
     exp_settings["randomize"] = False
     exp_settings["perfect_info"] = False
+    exp_settings['perfect_noise'] = False
     exp_settings["torch_device"] = "CPU"
     exp_settings["load_pretrained_model"] = False
+    exp_settings["save_model"] = False
 
     # Task Info
     exp_settings["kernel"] = "cosine"
@@ -36,13 +38,15 @@ def avg_returns(
     exp_settings["epochs"] = 1500
     exp_settings["noise_eval_epochs"] = 50
 
-    # Not really manipulated during bayes
+    # Noise Complexity
     exp_settings["hamming_threshold"] = 1
     exp_settings["pulls_per_episode"] = 10
-    exp_settings["noise_percent"] = [0.5]
+    exp_settings["noise_percent"] = [0.25]
     exp_settings["sim_threshold"] = 0
-    exp_settings["noise_type"] = False
-    exp_settings["noise_train_percent"] = 0
+    exp_settings["noise_type"] = "right_mask"
+    exp_settings["noise_train_percent"] = 0.25
+    exp_settings['noise_train_type'] = 'right_mask'
+    exp_settings['perfect_noise'] = False
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
@@ -61,25 +65,80 @@ def avg_returns(
     # End HyperParam Searches for BayesOpt#
 
     # Static vals for L2RL testing
-    #4a8b24s 500 epoch no noise init
+    # 4a8b24s 500 epoch no noise init
     # exp_settings['dim_hidden_a2c'] = int(2**6.711)
     # exp_settings['dim_hidden_lstm'] = int(2**6.711)
     # exp_settings['lstm_learning_rate'] = 10**-3
     # exp_settings['value_error_coef'] = 0.75
 
-    # 4a8b24s 1500 epoch noise init 50 percent right mask shuffle 
-    exp_settings['dim_hidden_a2c'] = 77
-    exp_settings['dim_hidden_lstm'] = 77
-    exp_settings['lstm_learning_rate'] = 0.00026
-    exp_settings['value_error_coef'] = 0.73822
+    # # 4a8b24s 500 epoch noise init 25 percent right mask shuffle (0.76256 returns)
+    # exp_settings['dim_hidden_a2c'] = int(2**8.6357)
+    # exp_settings['dim_hidden_lstm'] = int(2**8.6357)
+    # exp_settings['lstm_learning_rate'] = 10**-3.501
+    # exp_settings['value_error_coef'] = 0.7177
+    # exp_settings['entropy_error_coef'] = 0.0004
 
+    # # 4a8b24s 1500 epoch noise init 50 percent right mask shuffle
+    # exp_settings['dim_hidden_a2c'] = 77
+    # exp_settings['dim_hidden_lstm'] = 77
+    # exp_settings['lstm_learning_rate'] = 0.00026
+    # exp_settings['value_error_coef'] = 0.73822
 
+    # # 4a8b40s 1000 epoch noise init 50 percent right mask shuffle
+    # exp_settings['dim_hidden_a2c'] = int(2**9)
+    # exp_settings['dim_hidden_lstm'] = int(2**9)
+    # exp_settings['lstm_learning_rate'] = 10**-3
+    # exp_settings['value_error_coef'] = 0.7441
+    # exp_settings["entropy_error_coef"] = 0.0865
 
-    # exp_settings['embedder_learning_rate'] = 1e-5
-    # exp_settings['embedding_size'] = 128
+    # # 5a10b20s 1000 epoch noise init 20 percent right mask shuffle 0.72054 target #1
+    # exp_settings['dim_hidden_a2c'] = int(2**5.396)
+    # exp_settings['dim_hidden_lstm'] = int(2**5.396)
+    # exp_settings['lstm_learning_rate'] = 10**-3.603
+    # exp_settings['value_error_coef'] = 1
+    # exp_settings["entropy_error_coef"] = 0
 
-    # Annealing Entropy values from 1 to 0 linearly over training
-    exp_settings["entropy_error_coef"] = 1  
+    # # 5a10b20s 1000 epoch noise init 20 percent right mask shuffle 0.7152 target #2
+    # exp_settings['dim_hidden_a2c'] = int(2**6.6638)
+    # exp_settings['dim_hidden_lstm'] = int(2**6.6638)
+    # exp_settings['lstm_learning_rate'] = 10**-3.0185
+    # exp_settings['value_error_coef'] = .5535
+    # exp_settings["entropy_error_coef"] = 0.008
+
+    # 5a10b20s 1000 epoch noise init 20 percent right mask shuffle 0.7111 target #3
+    exp_settings['dim_hidden_a2c'] = int(2**7.117)
+    exp_settings['dim_hidden_lstm'] = int(2**7.117)
+    exp_settings['lstm_learning_rate'] = 10**-3.0818
+    exp_settings['value_error_coef'] = .8046
+    exp_settings["entropy_error_coef"] = 0.0446
+
+    # # 6a12b24s 1000 epoch noise init 25 percent right mask
+    # exp_settings['dim_hidden_a2c'] = int(2**6.597)
+    # exp_settings['dim_hidden_lstm'] = int(2**6.597)
+    # exp_settings['lstm_learning_rate'] = 10**-3.8705
+    # exp_settings['value_error_coef'] = 0.4878
+    # exp_settings["entropy_error_coef"] = 0.0134
+
+    # # 6a12b40s 1500 epoch noise init 25 percent right mask
+    # exp_settings['dim_hidden_a2c'] = int(2**6.0271)
+    # exp_settings['dim_hidden_lstm'] = int(2**6.0271)
+    # exp_settings['lstm_learning_rate'] = 10**-3.8511
+    # exp_settings['value_error_coef'] = 0.8928
+    # exp_settings["entropy_error_coef"] = 0.10297
+
+    # # 6a12b40s 1500 epoch noise init 50 percent right mask
+    # exp_settings['dim_hidden_a2c'] = int(2**7.479)
+    # exp_settings['dim_hidden_lstm'] = int(2**7.479)
+    # exp_settings['lstm_learning_rate'] = 10**-3.6955
+    # exp_settings['value_error_coef'] = 1
+    # exp_settings["entropy_error_coef"] = 0
+
+    # # 10a20b40s 3000 epoch noise init 25 percent right mask
+    # exp_settings['dim_hidden_a2c'] = int(2**5.514)
+    # exp_settings['dim_hidden_lstm'] = int(2**5.514)
+    # exp_settings['lstm_learning_rate'] = 10**-3.4478
+    # exp_settings['value_error_coef'] = 0.75
+    # exp_settings["entropy_error_coef"] = 0
 
     # Print out current hyperparams to console
     print("\nNext Run Commencing with the following params:")
@@ -131,12 +190,12 @@ def avg_returns(
 # Bounded region of parameter space
 pbounds = {
     # 'dim_hidden_a2c': (4, 8),               #transformed into 2**x in function
-    # "dim_hidden_lstm": (4, 9),  # transformed into 2**x in function
     'embedding_learning_rate': (-5, -3),    #transformed into 10**x in function
     'embedding_size': (4,9),                #transformed into 2**x in function
-    # 'entropy_error_coef': (0, 0.5),
+    # "dim_hidden_lstm": (4, 9),  # transformed into 2**x in function
+    # 'entropy_error_coef': (0, 0.2),
     # "lstm_learning_rate": (-5, -3),  # transformed into 10**x in function
-    # "value_error_coef": (0, 0.75),
+    # "value_error_coef": (0, 1),
 }
 
 optimizer = BayesianOptimization(
@@ -145,9 +204,26 @@ optimizer = BayesianOptimization(
     verbose=2,  # verbose = 1 prints only when a maximum is observed, verbose = 0 is silent
     random_state=1,
 )
+# log_name = './logs_5a10b20s1h_1000_epochs_noisy_init_20_right.json'
+# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right.json'
+# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right_2.json'
+log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right_3.json'
+# log_name = './logs_10a20n40s1h_2000_epochs_noisy_init_25_right.json'
+# log_name = './logs_10a20n40s1h_3000_epochs_embedder_noisy_init_25_right.json'
+# log_name = './logs_6a12b24s1h_1250_epochs_embedder_noisy_init_25_right.json'
+# log_name = './logs_6a12b40s1h_2000_epochs_noisy_init_25_right.json'
+# log_name = './logs_6a12b40s1h_1500_epochs_embedder_noisy_init_25_right.json'
+# log_name = './logs_6a12b40s1h_1500_epochs_noisy_init_50_right.json'
+# log_name = './logs_6a12b40s1h_1500_epochs_embedder_noisy_init_50_right.json'
+# log_name = './logs_4a8b40s1h_750_epochs_noisy_init_25_right.json'
+# log_name = './logs_4a8b40s1h_750_epochs_embedder_noisy_init_25_right.json'
+# log_name = './logs_4a8b40s1h_1000_epochs_noisy_init_50_right.json'
+# log_name = './logs_4a8b40s1h_1000_epochs_embedder_noisy_init_50_right.json'
+# log_name = './logs_4a8b24s1h_500_epochs_noisy_init_25_right.json'
+# log_name = './logs_4a8b24s1h_500_epochs_embedder_noisy_init_25_right.json'
 # log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_l2rl_noisy_bc_init.json"
 # log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_1500_epochs_embedder_noisy_bc_50_init.json"
-log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_1500_epochs_embedder1_noisy_bc_50_init.json"
+# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_1500_epochs_embedder1_noisy_bc_50_init.json"
 # log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_embedder_entropy_annealed_loss_summed.json"
 # log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_300_epochs_entropy_annealed_loss_summed.json"
 # log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_300_epochs.json"
@@ -156,11 +232,6 @@ log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs
 # log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_emb.json"
 # log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs.json"
 # log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_6a12n24s1h_750_epochs.json"
-
-# 4a8b24s l2rl
-# {"target": 0.77119, "params": {"dim_hidden_lstm": 6.5422972373862756, "lstm_learning_rate": -3.0,
-# "value_error_coef": 0.3887431851179297}
-
 
 # Suspend/Resume Function for longer iterations
 try:

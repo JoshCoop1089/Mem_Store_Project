@@ -1,8 +1,0 @@
-{"target": 0.39979, "params": {"embedding_learning_rate": -4.165955990594852, "embedding_size": 7.60162246721079}, "datetime": {"datetime": "2022-10-27 02:38:40", "elapsed": 0.0, "delta": 0.0}}
-{"target": 0.09299, "params": {"embedding_learning_rate": -4.99977125036531, "embedding_size": 5.511662863159199}, "datetime": {"datetime": "2022-10-27 03:46:32", "elapsed": 4072.793561, "delta": 4072.793561}}
-{"target": 0.09603, "params": {"embedding_learning_rate": -4.706488218365774, "embedding_size": 4.461692973843989}, "datetime": {"datetime": "2022-10-27 04:53:41", "elapsed": 8101.207328, "delta": 4028.413767}}
-{"target": 0.07065, "params": {"embedding_learning_rate": -4.627479577244658, "embedding_size": 5.727803635215238}, "datetime": {"datetime": "2022-10-27 06:02:02", "elapsed": 12202.724721, "delta": 4101.517393}}
-{"target": 0.14164, "params": {"embedding_learning_rate": -4.20646505153866, "embedding_size": 6.694083670016784}, "datetime": {"datetime": "2022-10-27 07:12:10", "elapsed": 16410.898626, "delta": 4208.173905}}
-{"target": 0.17167, "params": {"embedding_learning_rate": -4.111716287350217, "embedding_size": 8.313337767243596}, "datetime": {"datetime": "2022-10-27 08:57:31", "elapsed": 22731.481518, "delta": 6320.582892}}
-{"target": 0.23225, "params": {"embedding_learning_rate": -4.509870935725178, "embedding_size": 7.577268149171105}, "datetime": {"datetime": "2022-10-27 10:26:40", "elapsed": 28080.767991, "delta": 5349.286473}}
-{"target": 0.12394, "params": {"embedding_learning_rate": -4.701386573652541, "embedding_size": 7.144058820013813}, "datetime": {"datetime": "2022-10-27 11:48:39", "elapsed": 32999.259854, "delta": 4918.491863}}
