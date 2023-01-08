@@ -6,8 +6,10 @@ figs
 Reports
 runs
 data
+old_tensorboards
 .vscode
 random_tests.py
 bayesian_opt.py
 contextual_choice_sl.py
 experiment_run.py
+embedding_model.py

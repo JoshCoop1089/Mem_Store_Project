@@ -143,6 +143,9 @@ def run_experiment_sl(exp_settings):
     log_return = np.zeros(
         n_epochs,
     )
+    log_memory_accuracy = np.zeros(
+        n_epochs,
+    )
     log_embedder_accuracy = np.zeros(
         n_epochs,
     )
@@ -177,12 +180,6 @@ def run_experiment_sl(exp_settings):
     print("\n", "-*-_-*- " * 3, "\n")
     # loop over epoch
     for i in range(n_epochs):
-
-        # Anneal Entropy from 1 down to 0 over course of training
-        if exp_settings["entropy_error_coef"] == 1 and exp_settings['epochs'] != 0:
-            # entropy_weight = (i - exp_settings["epochs"]) / exp_settings["epochs"]
-            entropy_weight = (exp_settings["epochs"]-i) / exp_settings["epochs"]
-
         time_start = time.perf_counter()
 
         # get data for this epoch
@@ -220,10 +217,12 @@ def run_experiment_sl(exp_settings):
 
             # prealloc
             agent.dnd.pred_accuracy = 0
-            embedder_accuracy = 0
+            memory_accuracy = 0
             cumulative_reward = 0
             probs, rewards, values, entropies = [], [], [], []
             h_t, c_t = agent.get_init_states()
+            emb_model = agent.dnd.embedder
+            emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states()
 
             # Clearing the per trial hidden state buffer
             agent.flush_trial_buffer()
@@ -371,7 +370,7 @@ def run_experiment_sl(exp_settings):
                 )
 
                 # Does the predicted context match the actual context?
-                embedder_accuracy += int(real_bc == assumed_barcode_string)
+                memory_accuracy += int(real_bc == assumed_barcode_string)
 
                 probs.append(prob_a_t)
                 rewards.append(r_t)
@@ -424,7 +423,10 @@ def run_experiment_sl(exp_settings):
                 if exp_settings["mem_store"] == "embedding":
                     # Embedder Loss for Episode
                     a_dnd = agent.dnd
-                    loss_vals = [x[2] for x in a_dnd.trial_buffer]
+
+                    # Only use loss for memories stored (check DND.py save_mem function to be sure)
+                    mem_start, mem_stop = exp_settings['emb_mem_limits']
+                    loss_vals = [x[2] for x in a_dnd.trial_buffer[mem_start:mem_stop]]
                     episode_loss = torch.stack(loss_vals).sum()
                     a_dnd.embedder_loss[i] += episode_loss / episodes_per_epoch
 
@@ -465,9 +467,9 @@ def run_experiment_sl(exp_settings):
             )
 
             # Updating avg accuracy per episode
-            # log_embedder_accuracy[i] += torch.div(agent.dnd.pred_accuracy, (episodes_per_epoch*pulls_per_episode))
-            log_embedder_accuracy[i] += torch.div(
-                embedder_accuracy, (episodes_per_epoch * pulls_per_episode)
+            log_embedder_accuracy[i] += torch.div(agent.dnd.pred_accuracy, (episodes_per_epoch*pulls_per_episode))
+            log_memory_accuracy[i] += torch.div(
+                memory_accuracy, (episodes_per_epoch * pulls_per_episode)
             )
 
             # Loss Logging
@@ -478,7 +480,8 @@ def run_experiment_sl(exp_settings):
         # Tensorboard Stuff
         if exp_settings["tensorboard_logging"]:
             tb.add_scalar("LSTM Returns", log_return[i], i)
-            tb.add_scalar("Mem Retrieval Accuracy", log_embedder_accuracy[i], i)
+            tb.add_scalar("Mem Retrieval Accuracy", log_memory_accuracy[i], i)
+            tb.add_scalar("Emb Retrieval Accuracy", log_embedder_accuracy[i], i)
             if i < exp_settings["epochs"]:
                 tb.add_histogram("R-Gate Weights Train Epochs", r_gate, i)
             else:
@@ -501,10 +504,15 @@ def run_experiment_sl(exp_settings):
             )
             # Accuracy over the last 10 epochs
             if i > 10:
-                avg_acc = log_embedder_accuracy[i - 9 : i + 1].mean()
+                avg_acc = log_memory_accuracy[i - 9 : i + 1].mean()
+                avg_emb_acc = log_embedder_accuracy[i - 9 : i + 1].mean()
             else:
-                avg_acc = log_embedder_accuracy[: i + 1].mean()
-            print("  Memory Accuracy:", round(avg_acc, 4), end=" | ")
+                avg_acc = log_memory_accuracy[: i + 1].mean()
+                avg_emb_acc = log_embedder_accuracy[: i + 1].mean()
+                
+            print("  Mem Acc:", round(avg_acc, 4), end=" | ")
+            if exp_settings['mem_store'] == 'embedding':
+                print("Model Acc:", round(avg_emb_acc, 4), end=" | ")
             print(
                 "Ritter Baseline:",
                 round(1 - 1 / exp_settings["num_barcodes"], 4),
@@ -534,9 +542,13 @@ def run_experiment_sl(exp_settings):
     print(f"BC Size: {exp_settings['barcode_size']}\t| Noise Added: {int(exp_settings['barcode_size']*exp_settings['noise_train_percent'])}")
     for idx, percent in enumerate(exp_settings["noise_percent"]):
         no_noise_eval = np.mean(log_return[start : start + eval_len])
-        no_noise_accuracy = np.mean(log_embedder_accuracy[start : start + eval_len])
+        no_noise_accuracy = np.mean(log_memory_accuracy[start : start + eval_len])
+        acc = f"Accuracy: {round(no_noise_accuracy,3)}"
+        if exp_settings['mem_store'] == 'embedding':
+            no_noise_emb_model_acc = np.mean(log_embedder_accuracy[start : start + eval_len])
+            acc += f" \t| Model Acc: {round(no_noise_emb_model_acc,3)}"
         print(
-            f"Noise Bits: {int(percent*exp_settings['barcode_size'])}\t| Returns: {round(no_noise_eval,3):0.3} \t| Accuracy: {round(no_noise_accuracy,3)}"
+            f"Noise Bits: {int(percent*exp_settings['barcode_size'])}\t| Returns: {round(no_noise_eval,3):0.3} \t| {acc}"
         )
         start += eval_len
 
@@ -554,7 +566,7 @@ def run_experiment_sl(exp_settings):
     )
     print("- - - " * 3)
 
-    logs_for_graphs = log_return, log_embedder_accuracy, epoch_sim_log
+    logs_for_graphs = log_return, log_memory_accuracy, epoch_sim_log, log_embedder_accuracy
     loss_logs = log_loss_value, log_loss_policy, log_loss_total, agent.dnd.embedder_loss
     key_data = log_keys, epoch_mapping
 
@@ -625,6 +637,8 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["sim_threshold"] = 0
     # Hamming distance for multi clustering
     exp_settings["hamming_threshold"] = 0
+    exp_settings['emb_mem_limits'] = (0,exp_settings['pulls_per_episode'])
+    exp_settings['mem_mode'] = 'LSTM'
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
@@ -633,13 +647,15 @@ def run_experiment(exp_base, exp_difficulty):
     # Forced Hyperparams (found after multiple passes through Bayesian Optimization)
     # exp_settings["torch_device"] = "CPU"
     exp_settings["torch_device"] = "GPU"
-    # exp_settings["dim_hidden_a2c"] = int(2**8.644)  # 400
-    # exp_settings["dim_hidden_lstm"] = int(2**8.655)  # 403
-    # exp_settings["embedder_learning_rate"] = 10**-3.0399  # 9.1e-4
-    # exp_settings["embedding_size"] = int(2**8.629)  # 395
-    # exp_settings["entropy_error_coef"] = 0.0391
-    # exp_settings["lstm_learning_rate"] = 10**-3.332  # 4.66e-4
-    # exp_settings["value_error_coef"] = 0.62
+    exp_settings["dim_hidden_a2c"] = int(2**8.644)  # 400
+    exp_settings["dim_hidden_lstm"] = int(2**8.655)  # 403
+    exp_settings["embedder_learning_rate"] = 10**-3.0399  # 9.1e-4
+    exp_settings["embedding_size"] = int(2**8.629)  # 395
+    exp_settings["entropy_error_coef"] = 0.0391
+    exp_settings["lstm_learning_rate"] = 10**-3.332  # 4.66e-4
+    exp_settings["value_error_coef"] = 0.62
+    exp_settings["dropout_coef"] = 0
+    
 
     # Experimental Variables
     (
@@ -659,6 +675,7 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["pulls_per_episode"],
         exp_settings["sim_threshold"],
         exp_settings["noise_percent"],
+        exp_settings['emb_mem_limits']
     ) = exp_difficulty
 
     # Task Size specific hyperparams
@@ -736,44 +753,54 @@ def run_experiment(exp_base, exp_difficulty):
                 exp_settings['embedder_learning_rate'] = 10**-4.2065
 
     if exp_settings['num_arms'] == 5 and exp_settings['num_barcodes'] == 10:
+        if exp_settings['barcode_size'] == 10:
+            exp_settings['dim_hidden_a2c'] = int(2**6.9958)
+            exp_settings['dim_hidden_lstm'] = int(2**6.9958)
+            exp_settings['lstm_learning_rate'] = 10**-3.0788
+            exp_settings['value_error_coef'] = 0.9407
+            exp_settings["entropy_error_coef"] = 0.006
+            exp_settings['embedding_size'] = int(2**7.677)
+            exp_settings['embedder_learning_rate'] = 10**-3
+            exp_settings['dropout_coef'] = 0
+
         if exp_settings['barcode_size'] == 20:
-            # exp_settings['dim_hidden_a2c'] = int(2**5.396)
-            # exp_settings['dim_hidden_lstm'] = int(2**5.396)
-            # exp_settings['lstm_learning_rate'] = 10**-3.603
-            # exp_settings['value_error_coef'] = 1
-            # exp_settings["entropy_error_coef"] = 0
-            # exp_settings['embedding_size'] = int(2**7.741)
-            # exp_settings['embedder_learning_rate'] = 10**-3
+            if exp_settings['noise_train_percent'] == 0.2:
+                # 5a10b20s 1000 epoch noise init 20 percent right mask shuffle 0.7111 target #30.667 emb target
+                exp_settings['dim_hidden_a2c'] = int(2**7.117)
+                exp_settings['dim_hidden_lstm'] = int(2**7.117)
+                exp_settings['lstm_learning_rate'] = 10**-3.0818
+                exp_settings['value_error_coef'] = .8046
+                exp_settings["entropy_error_coef"] = 0.0446
+                # exp_settings['embedding_size'] = int(2**8.853385)
+                # exp_settings['embedder_learning_rate'] = 10**-3.6691363948422455
+                # exp_settings['embedding_size'] = int(2**7.3127)
+                # exp_settings['embedder_learning_rate'] = 10**-3.084003903415946
+                exp_settings['embedding_size'] = int(2**4.9734)
+                exp_settings['embedder_learning_rate'] = 10**-3.5428
+                exp_settings['dropout_coef'] = 0.363
 
-            # 5a10b20s 1000 epoch noise init 20 percent right mask shuffle 0.7111 target #30.667 emb target
-            exp_settings['dim_hidden_a2c'] = int(2**7.117)
-            exp_settings['dim_hidden_lstm'] = int(2**7.117)
-            exp_settings['lstm_learning_rate'] = 10**-3.0818
-            exp_settings['value_error_coef'] = .8046
-            exp_settings["entropy_error_coef"] = 0.0446
-            exp_settings['embedding_size'] = int(2**7.3127)
-            exp_settings['embedder_learning_rate'] = 10**-3.084003903415946
 
-    # Experimental Variables
-    (
-        mem_store_types,
-        exp_settings["epochs"],
-        exp_settings["noise_eval_epochs"],
-        exp_settings["noise_train_percent"],
-        exp_settings['noise_train_type'],
-        exp_settings['noise_type'],
-        num_repeats,
-    ) = exp_base
-    (
-        exp_settings["hamming_threshold"],
-        exp_settings["num_arms"],
-        exp_settings["num_barcodes"],
-        exp_settings["barcode_size"],
-        exp_settings["pulls_per_episode"],
-        exp_settings["sim_threshold"],
-        exp_settings["noise_percent"],
-    ) = exp_difficulty
+            if exp_settings['noise_train_percent'] == 0.4:
+                # 5a10b20s 1000 epoch noise init 40 percent right mask shuffle 0.714 target
+                exp_settings['dim_hidden_a2c'] = int(2**8.4056)
+                exp_settings['dim_hidden_lstm'] = int(2**8.4056)
+                exp_settings['lstm_learning_rate'] = 10**-3.017
+                exp_settings['value_error_coef'] = .9885
+                exp_settings["entropy_error_coef"] = 0.049
+                exp_settings['embedding_size'] = int(2**7.5208)
+                exp_settings['embedder_learning_rate'] = 10**-3.5561
+                exp_settings['dropout_coef'] = 0
 
+        if exp_settings['barcode_size'] == 40:
+            exp_settings['dim_hidden_a2c'] = int(2**7.2753)
+            exp_settings['dim_hidden_lstm'] = int(2**7.2753)
+            exp_settings['lstm_learning_rate'] = 10**-3.5947
+            exp_settings['value_error_coef'] = .906998
+            exp_settings["entropy_error_coef"] = 0.04356
+            exp_settings['embedding_size'] = int(2**7.4261)
+            exp_settings['embedder_learning_rate'] = 10**-4.1616
+            exp_settings['dropout_coef'] = 0.2964
+			
     exp_length = exp_settings["epochs"] + exp_settings["noise_eval_epochs"] * len(
         exp_settings["noise_percent"]
     )
@@ -790,6 +817,9 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["num_barcodes"] <= 32
     ), "Too many distinct barcodes to display with current selection of labels in T-SNE"
     assert (exp_settings['num_barcodes']%exp_settings['num_arms'] == 0), "Number of barcodes must be a multiple of number of arms"
+    assert (
+        exp_settings['pulls_per_episode'] >= exp_settings['emb_mem_limits'][1] > exp_settings['emb_mem_limits'][0] >= 0
+    ), "Memory storing indicies are incorrect, verify they are between 0 and your selected number of pulls per episode"
 
     ### Beginning of Experimental Runs ###
     epoch_info = np.array(
@@ -812,9 +842,13 @@ def run_experiment(exp_base, exp_difficulty):
     for idx_mem, mem_store in enumerate(mem_store_types):
         tot_rets = np.zeros(exp_length)
         tot_acc = np.zeros(exp_length)
+        tot_emb_acc = np.zeros(exp_length)
         exp_settings["mem_store"] = mem_store
         exp_name = exp_size + exp_other + f"_{exp_settings['mem_store']}"
+        if exp_settings['emb_mem_limits'] != (0,exp_settings['pulls_per_episode']):
+            exp_name += f"_{exp_settings['emb_mem_limits'][0]}-{exp_settings['emb_mem_limits'][1]}m"
         exp_settings["exp_name"] = exp_name
+
 
         # Print out current hyperparams to console
         print("\nNext Run Commencing with the following params:")
@@ -826,8 +860,10 @@ def run_experiment(exp_base, exp_difficulty):
         )
         if exp_settings["mem_store"] == "embedding":
             print(
-                f"Emb_LR: {round(exp_settings['embedder_learning_rate'], 5)} | Emb_Size: {exp_settings['embedding_size']}"
+                f"Emb_LR: {round(exp_settings['embedder_learning_rate'], 5)} | Emb_Size: {exp_settings['embedding_size']} | Dropout: {round(exp_settings['dropout_coef'], 3)}"
             )
+            print(
+                f"Memory Limits: {exp_settings['emb_mem_limits'][0]}-{exp_settings['emb_mem_limits'][1]} out of {exp_settings['pulls_per_episode']}")
         print(
             f"Val_CF: {round(exp_settings['value_error_coef'], 5)} | Ent_CF: {round(exp_settings['entropy_error_coef'], 5)}"
         )
@@ -845,13 +881,14 @@ def run_experiment(exp_base, exp_difficulty):
             exp_settings['save_model'] = (i == 0 and not exp_settings['load_pretrained_model'])
 
             logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
-            log_return, log_embedder_accuracy, epoch_sim_logs = logs_for_graphs
+            log_return, log_memory_accuracy, epoch_sim_logs, log_embedder_accuracy = logs_for_graphs
             log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
             log_keys, epoch_mapping = key_data
 
             # Find total averages over all repeats
             tot_rets += log_return / num_repeats
-            tot_acc += log_embedder_accuracy / num_repeats
+            tot_acc += log_memory_accuracy / num_repeats
+            tot_emb_acc += log_embedder_accuracy / num_repeats
 
         if exp_length >= 200:
             if exp_settings["epochs"] < 25:
@@ -869,5 +906,6 @@ def run_experiment(exp_base, exp_difficulty):
                 tot_acc=tot_acc,
                 epoch_mapping=epoch_mapping,
                 epoch_info=epoch_info,
+                tot_emb_acc=tot_emb_acc
             )
     ### End of Experiment Data

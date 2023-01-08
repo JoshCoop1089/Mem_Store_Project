@@ -86,6 +86,9 @@ class DND:
             )
             self.criterion = nn.CrossEntropyLoss().to(self.device)
 
+            # Limit which pulls are stored in memory and used in loss calc
+            self.mem_start, self.mem_stop = exp_settings['emb_mem_limits']
+
         # allocate space for memories
         self.reset_memory()
         # check everything
@@ -118,21 +121,24 @@ class DND:
             self.save_memory(k, v)
 
     def save_memory(self, memory_key, memory_val):
-        try:
-            test = self.keys[0][0]
-        except IndexError:
-            self.keys.pop(0)
+        # try:
+        #     test = self.keys[0][0]
+        # except IndexError:
+        #     self.keys.pop(0)
         # Save every embedding of the trial
         self.trial_buffer.pop(0)
         keys = self.trial_buffer
         # self.trial_hidden_states = [keys[-1]]
         # self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != () and i > len(keys)//4]
         self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != ()]
+        mem_restriction_trial = self.trial_hidden_states[self.mem_start:self.mem_stop]
+        # mem_restriction_trial = self.trial_hidden_states[4:8]
 
         # Append new memories at head of list to allow sim search to find these first
-        for embedding, real_bc, _, predicted_bc in self.trial_hidden_states:
+        # for embedding, real_bc, _, model_predicted_bc, mem_pred_bc in self.trial_hidden_states:
+        for embedding, real_bc, _, model_predicted_bc, mem_pred_bc in mem_restriction_trial:
             self.keys = [
-                [torch.squeeze(embedding.detach()), real_bc, predicted_bc]
+                [torch.squeeze(embedding.detach()), real_bc, model_predicted_bc, mem_pred_bc]
             ] + self.keys
             self.vals = [torch.squeeze(memory_val.detach())] + self.vals
 
@@ -189,7 +195,7 @@ class DND:
         # Get class ID number for predicted barcode
         soft = torch.softmax(model_output, dim=1)
         pred_memory_id = torch.argmax(soft)
-        # self.pred_accuracy += int(torch.eq(pred_memory_id, real_label_id))
+        self.pred_accuracy += int(torch.eq(pred_memory_id, real_label_id))
 
         predicted_context = self.sorted_key_list[pred_memory_id]
         # predicted_context = torch.tensor(0, device = self.device)
@@ -203,12 +209,14 @@ class DND:
             similarities = compute_similarities(embedding, key_list, self.kernel)
 
             # get the best-match memory
-            best_memory_val, _, best_sim_score = self._get_memory(similarities)
+            best_memory_val, best_mem_id, best_sim_score = self._get_memory(similarities)
+            mem_predicted_context = self.keys[best_mem_id][1]
 
         # If nothing is stored in memory yet, return 0's
         else:
             self.trial_buffer.append(
-                (embedding, real_label_as_string, emb_loss, predicted_context)
+                (embedding, real_label_as_string, emb_loss, predicted_context,
+                 _empty_barcode(self.exp_settings["barcode_size"]))
             )
             return (
                 _empty_memory(self.hidden_lstm_dim, device=self.device),
@@ -218,14 +226,14 @@ class DND:
 
         # Store embedding and predicted class label memory index in trial_buffer
         self.trial_buffer.append(
-            (embedding, real_label_as_string, emb_loss, predicted_context)
+            (embedding, real_label_as_string, emb_loss, predicted_context, mem_predicted_context)
         )
 
         # # Prototype memory gating
         # if best_sim_score.item() < 0.75:
         #     return _empty_memory(self.hidden_lstm_dim, self.device), _empty_barcode(self.exp_settings['barcode_size']), torch.tensor(0, device=self.device)
         # else:
-        return best_memory_val, predicted_context, best_sim_score
+        return best_memory_val, mem_predicted_context, best_sim_score
 
     def get_memory_non_embedder(self, query_key):
         """Perform a 1-NN search over dnd
