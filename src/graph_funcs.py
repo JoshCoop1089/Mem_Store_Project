@@ -620,16 +620,18 @@ if __name__ == "__main__":
     # stats = [6,12,40]
 
     # stats = [5,10,10, 0.2]
+    # stats = [5,10,10, 0.4]
     # stats = [5,10,20, 0.2]
     # stats = [5,10,20, 0.4]
-    stats = [5,10,40, 0.2]
+    # stats = [5,10,40, 0.2]
+    stats = [5,10,40, 0.4]
 
-    noise_eval = True
-    # noise_eval = False
+    # noise_eval = True
+    noise_eval = False
     # exp_types = ['embedding']
     # mem_limits = [(0,10), (1,9), (2,8), (3,7)]
     exp_types = ['context', 'embedding', 'L2RL']
-    mem_limits = (1,9)
+    mem_limits = (0,10)
 
     # mem_limits = [(0,5), (1,4)]
     # mem_limits = (1,9)

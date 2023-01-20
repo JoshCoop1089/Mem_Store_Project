@@ -221,8 +221,9 @@ def run_experiment_sl(exp_settings):
             cumulative_reward = 0
             probs, rewards, values, entropies = [], [], [], []
             h_t, c_t = agent.get_init_states()
-            emb_model = agent.dnd.embedder
-            emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states()
+            if exp_settings['mem_store'] == 'embedding':
+                emb_model = agent.dnd.embedder
+                emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states()
 
             # Clearing the per trial hidden state buffer
             agent.flush_trial_buffer()
@@ -455,11 +456,11 @@ def run_experiment_sl(exp_settings):
                         for name, param in layer.named_parameters():
                             param.requires_grad = True
 
-                # LSTM and A2C Backprop
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
+            # LSTM and A2C Backprop
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
             # Updating avg return per episode
             log_return[i] += torch.div(
@@ -754,16 +755,40 @@ def run_experiment(exp_base, exp_difficulty):
 
     if exp_settings['num_arms'] == 5 and exp_settings['num_barcodes'] == 10:
         if exp_settings['barcode_size'] == 10:
-            exp_settings['dim_hidden_a2c'] = int(2**6.9958)
-            exp_settings['dim_hidden_lstm'] = int(2**6.9958)
-            exp_settings['lstm_learning_rate'] = 10**-3.0788
-            exp_settings['value_error_coef'] = 0.9407
-            exp_settings["entropy_error_coef"] = 0.006
-            exp_settings['embedding_size'] = int(2**7.677)
-            exp_settings['embedder_learning_rate'] = 10**-3
-            exp_settings['dropout_coef'] = 0
+            if exp_settings['noise_train_percent'] == 0.2:
+                exp_settings['dim_hidden_a2c'] = int(2**6.9958)
+                exp_settings['dim_hidden_lstm'] = int(2**6.9958)
+                exp_settings['lstm_learning_rate'] = 10**-3.0788
+                exp_settings['value_error_coef'] = 0.9407
+                exp_settings["entropy_error_coef"] = 0.006
+                exp_settings['embedding_size'] = int(2**7.677)
+                exp_settings['embedder_learning_rate'] = 10**-3
+                exp_settings['dropout_coef'] = 0
+
+            # LSTM on Embedder with Single layer end
+            if exp_settings['noise_train_percent'] == 0.4:
+                exp_settings['dim_hidden_a2c'] = int(2**7.0673)
+                exp_settings['dim_hidden_lstm'] = int(2**7.0673)
+                exp_settings['lstm_learning_rate'] = 10**-3.4393
+                exp_settings['value_error_coef'] = 1.0
+                exp_settings["entropy_error_coef"] = 0.0
+                exp_settings['embedding_size'] = int(2**7.07)
+                exp_settings['embedder_learning_rate'] = 10**-3.5419
+                exp_settings['dropout_coef'] = 0
 
         if exp_settings['barcode_size'] == 20:
+
+            # LSTM on Embedder w/ single layer end
+            if exp_settings['noise_train_percent'] == 0.1:
+                exp_settings['dim_hidden_a2c'] = int(2**6.42929)
+                exp_settings['dim_hidden_lstm'] = int(2**6.42929)
+                exp_settings['lstm_learning_rate'] = 10**-3.32629
+                exp_settings['value_error_coef'] = 0.2146
+                exp_settings["entropy_error_coef"] = 0.04
+                exp_settings['embedding_size'] = int(2**8.9989)
+                exp_settings['embedder_learning_rate'] = 10**-3.3444
+                exp_settings['dropout_coef'] = 0
+
             if exp_settings['noise_train_percent'] == 0.2:
                 # 5a10b20s 1000 epoch noise init 20 percent right mask shuffle 0.7111 target #30.667 emb target
                 exp_settings['dim_hidden_a2c'] = int(2**7.117)
@@ -775,9 +800,13 @@ def run_experiment(exp_base, exp_difficulty):
                 # exp_settings['embedder_learning_rate'] = 10**-3.6691363948422455
                 # exp_settings['embedding_size'] = int(2**7.3127)
                 # exp_settings['embedder_learning_rate'] = 10**-3.084003903415946
-                exp_settings['embedding_size'] = int(2**4.9734)
-                exp_settings['embedder_learning_rate'] = 10**-3.5428
                 exp_settings['dropout_coef'] = 0.363
+                if exp_settings['mem_mode'] == 'LSTM':
+                    exp_settings['embedding_size'] = int(2**6.8256)
+                    exp_settings['embedder_learning_rate'] = 10**-3.03456
+                else:
+                    exp_settings['embedding_size'] = int(2**4.9734)
+                    exp_settings['embedder_learning_rate'] = 10**-3.5428
 
 
             if exp_settings['noise_train_percent'] == 0.4:
@@ -792,15 +821,32 @@ def run_experiment(exp_base, exp_difficulty):
                 exp_settings['dropout_coef'] = 0
 
         if exp_settings['barcode_size'] == 40:
-            exp_settings['dim_hidden_a2c'] = int(2**7.2753)
-            exp_settings['dim_hidden_lstm'] = int(2**7.2753)
-            exp_settings['lstm_learning_rate'] = 10**-3.5947
-            exp_settings['value_error_coef'] = .906998
-            exp_settings["entropy_error_coef"] = 0.04356
-            exp_settings['embedding_size'] = int(2**7.4261)
-            exp_settings['embedder_learning_rate'] = 10**-4.1616
-            exp_settings['dropout_coef'] = 0.2964
-			
+            if exp_settings['noise_train_percent'] == 0.2:
+                exp_settings['dim_hidden_a2c'] = int(2**7.2753)
+                exp_settings['dim_hidden_lstm'] = int(2**7.2753)
+                exp_settings['lstm_learning_rate'] = 10**-3.5947
+                exp_settings['value_error_coef'] = .906998
+                exp_settings["entropy_error_coef"] = 0.04356
+                exp_settings['embedding_size'] = int(2**7.4261)
+                exp_settings['embedder_learning_rate'] = 10**-4.1616
+                exp_settings['dropout_coef'] = 0.2964
+
+            # LSTm on embedder single layer end
+            if exp_settings['noise_train_percent'] == 0.4:
+                exp_settings['dim_hidden_a2c'] = int(2**6.0873)
+                exp_settings['dim_hidden_lstm'] = int(2**6.0873)
+                exp_settings['lstm_learning_rate'] = 10**-3.4539
+                exp_settings['value_error_coef'] = 1.0
+                exp_settings["entropy_error_coef"] = 0.09921
+                exp_settings['embedding_size'] = int(2**9)
+                exp_settings['embedder_learning_rate'] = 10**-3
+                exp_settings['dropout_coef'] = 0.0
+
+
+
+            # # LSTM on Embedder with Single layer end
+            # if exp_settings['noise_train_percent'] == 0.4:
+
     exp_length = exp_settings["epochs"] + exp_settings["noise_eval_epochs"] * len(
         exp_settings["noise_percent"]
     )

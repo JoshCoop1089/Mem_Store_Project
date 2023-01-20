@@ -21,17 +21,17 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 # exp_types = ['context', 'hidden', 'L2RL']
 # exp_types = ['context', 'embedding']
 # exp_types = ['context', 'embedding', 'L2RL']
-# exp_types = ['context']
-exp_types = ['embedding']
+exp_types = ['context']
+# exp_types = ['embedding']
 # exp_types = ['embedding', 'hidden']
-# exp_types = ['embedding', 'hidden', 'L2RL']
+# exp_types = ['embedding', 'L2RL']
 # exp_types = ['hidden']
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
-training_epochs = 20
-noise_epochs = 5
+training_epochs = 600
+noise_epochs = 50
 noise_train_percent = 0.2
 noise_train_type = 'right_mask'
 # noise_train_type = 'left_mask'
@@ -40,15 +40,15 @@ noise_train_type = 'right_mask'
 # Experiment Difficulty
 hamming_clustering = 1     #Create evenly distributed clusters based on arms/barcodes
 sim_threshold = 0           #Create one cluster regardless of arms/barcodes
-num_arms = 2
-num_barcodes = 4
-barcode_size = 8
-pulls_per_episode = 5
+num_arms = 5
+num_barcodes = 10
+barcode_size = 20
+pulls_per_episode = 10
 try: 
     mem_limits = (int(sys.argv[1]), pulls_per_episode - int(sys.argv[1]))
 except:
-    # mem_limits = (0,pulls_per_episode)
-    mem_limits = (1,4)
+    mem_limits = (0,pulls_per_episode)
+    # mem_limits = (1,4)
 noise_percent = [4/20]
 # noise_percent = [6/24]
 # noise_percent = [12/24]
@@ -72,18 +72,19 @@ num_repeats = 1
 figure_save_location = "..\\Mem_Store_Project\\figs\\"
 ###### NO MORE CHANGES!!!!!!!! ##########
 
-# Train Model
-for noise_type in noise_types:
-    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits
-    run_experiment(exp_base, exp_difficulty)
+# # Train Model
+# for noise_type in noise_types:
+#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#     exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits
+#     run_experiment(exp_base, exp_difficulty)
     
 
 # Eval Model on different noise types
+
 training_epochs = 0
 noise_epochs = 50
 num_repeats = 1
-noise_percent = [4/20, 6/20, 8/20, 10/20, 12/20, 14/20, 16/20]
+noise_percent = [4/20, 6/20, 8/20, 10/20, 12/20, 14/20]
 # noise_percent = [6/24, 8/24, 10/24, 12/24, 14/24, 16/24]
 # noise_percent = [10/40, 15/40, 20/40, 25/40, 30/40, 35/40]
 # noise_percent = [20/40, 25/40, 30/40, 35/40, 40/40, 45/40]
