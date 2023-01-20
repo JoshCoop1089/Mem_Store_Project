@@ -7,9 +7,11 @@ Reports
 runs
 data
 old_tensorboards
+Promising Models
 .vscode
 random_tests.py
 bayesian_opt.py
 contextual_choice_sl.py
 experiment_run.py
 embedding_model.py
+mem_recall_accuracy_test.py
