@@ -262,29 +262,7 @@ class ContextualBandit:
                         mini_cluster_bag.add(barcode_string)
 
                 if not new_seed_needed:
-                    # Need to store individual cluster for arm reshuffling at every epoch
-                    unnoised_cluster_list = list(mini_cluster_bag)
-                    # print(unnoised_cluster_list)
-
-                    # Append noise onto end of barcode to test model understanding of important features
-                    cluster_list = [""]*len(unnoised_cluster_list)
-                    assert 0 <= self.noise_threshold < 1
-                    noise_added = int(self.barcode_size * self.noise_threshold)
-                    for idx, barcode in enumerate(unnoised_cluster_list):
-                        np_noise = np.random.randint(0, 2, noise_added)
-                        noise = np.array2string(np_noise)[1:-1].replace(" ", "").replace("\n", "")
-                        if self.noise_type == 'right_mask':
-                            cluster_list[idx] = barcode + noise
-                        elif self.noise_type == 'left_mask':
-                            cluster_list[idx] = noise + barcode
-                        elif self.noise_type == 'none':
-                            cluster_list[idx] = barcode
-                    # print(cluster_list)
-                    self.cluster_lists.append(cluster_list)
-                    cluster_mapping = self.map_arms_to_barcodes(
-                        barcode_list=cluster_list
-                    )
-                    mapping = mapping | cluster_mapping
+                    mapping = self.add_noise_to_barcodes(mini_cluster_bag, mapping)
 
         return mapping
 
@@ -294,6 +272,33 @@ class ContextualBandit:
             mapping = mapping | self.map_arms_to_barcodes(
                 mapping=None, barcode_list=cluster
             )
+        return mapping
+
+    def add_noise_to_barcodes(self, mini_cluster_bag, mapping):
+        # Need to store individual cluster for arm reshuffling at every epoch
+        unnoised_cluster_list = list(mini_cluster_bag)
+        # print(unnoised_cluster_list)
+
+        # Append noise onto end of barcode to test model understanding of important features
+        cluster_list = [""]*len(unnoised_cluster_list)
+        assert 0 <= self.noise_threshold < 1
+        noise_added = int(self.barcode_size * self.noise_threshold)
+        for idx, barcode in enumerate(unnoised_cluster_list):
+            np_noise = np.random.randint(0, 2, noise_added)
+            noise = np.array2string(np_noise)[1:-1].replace(" ", "").replace("\n", "")
+            if self.noise_type == 'right_mask':
+                cluster_list[idx] = barcode + noise
+            elif self.noise_type == 'left_mask':
+                cluster_list[idx] = noise + barcode
+            elif self.noise_type == 'none':
+                cluster_list[idx] = barcode
+        # print(cluster_list)
+        self.cluster_lists.append(cluster_list)
+        cluster_mapping = self.map_arms_to_barcodes(
+            barcode_list=cluster_list
+        )
+        mapping = mapping | cluster_mapping
+
         return mapping
 
     def generate_barcode_mapping(self):
@@ -321,17 +326,19 @@ class ContextualBandit:
             if len(barcode_bag) == 0:
                 seed_bc = barcode
 
-            if self.sim_threshold:
-                similarity = np.dot(seed_bc, barcode) / (norm(seed_bc) * norm(barcode))
-                if similarity < self.sim_threshold:
-                    continue
+            # if self.sim_threshold:
+            #     similarity = np.dot(seed_bc, barcode) / (norm(seed_bc) * norm(barcode))
+            #     if similarity < self.sim_threshold:
+            #         continue
 
             # barcode -> string starts out at '[1 1 0]', thus the reductions on the end
             barcode_string = np.array2string(barcode)[1:-1].replace(" ", "")
             barcode_bag.add(barcode_string)
 
-        barcode_bag_list = list(barcode_bag)
-        mapping = self.map_arms_to_barcodes(mapping=None, barcode_list=barcode_bag_list)
+        mapping = self.add_noise_to_barcodes(barcode_bag, mapping)
+
+        # barcode_bag_list = list(barcode_bag)
+        # mapping = self.map_arms_to_barcodes(mapping=None, barcode_list=barcode_bag_list)
         return mapping
 
     def map_arms_to_barcodes(self, mapping=None, barcode_list=None):
