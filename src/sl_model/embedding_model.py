@@ -47,7 +47,7 @@ class Embedder(nn.Module):
             x = self.m2c(F.leaky_relu(x))
         elif self.mem_mode == 'LSTM':
             x, (h1,c1)  = self.LSTM(h, (self.h_lstm,self.c_lstm))
-        self.h_lstm, self.c_lstm = h1,c1
+            self.h_lstm, self.c_lstm = h1,c1
         embedding = x
         predicted_context = self.e2c(F.leaky_relu(x))
 

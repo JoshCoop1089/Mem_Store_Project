@@ -2,7 +2,7 @@
 
 ### Dependencies and env creation
 ```
-conda env create -f environment.yaml
+conda env create -f environment.yml
 ```
 
 Python 3.9 only required for the LOWESS smoothing on results graphs in contextual_choice_sl.py
@@ -18,7 +18,7 @@ Change exp_settings['tensorboard_logging'] boolean in run_experiment function in
 ### File Structure:
 ```
 ├── README.md
-├── environment.yaml
+├── environment.yml
 ├── figs                                # Save location for graphs created
 └── src
     ├── experiment_run.py               # quick driver for running multiple experiments from contextual_choice_sl.py

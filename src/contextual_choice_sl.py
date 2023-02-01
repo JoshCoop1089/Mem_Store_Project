@@ -456,11 +456,11 @@ def run_experiment_sl(exp_settings):
                         for name, param in layer.named_parameters():
                             param.requires_grad = True
 
-            # LSTM and A2C Backprop
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+                # LSTM and A2C Backprop
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
 
             # Updating avg return per episode
             log_return[i] += torch.div(
