@@ -15,17 +15,13 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 
 ###### Change These!!! ###########
 # Experiment Type and Length
-#context, embedding, hidden, L2RL
-#
-# exp_types = ['context', 'embedding','hidden', 'L2RL']
-# exp_types = ['context', 'hidden', 'L2RL']
+#context, embedding, L2RL
+
 exp_types = ['context', 'embedding']
 # exp_types = ['context', 'embedding', 'L2RL']
 # exp_types = ['context']
 # exp_types = ['embedding']
-# exp_types = ['embedding', 'hidden']
-# exp_types = ['embedding', 'L2RL']
-# exp_types = ['hidden']
+
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
@@ -34,8 +30,6 @@ training_epochs = 20
 noise_epochs = 5
 noise_train_percent = 0.25
 noise_train_type = 'right_mask'
-# noise_train_type = 'left_mask'
-# noise_train_type = 'none'
 
 # Experiment Difficulty
 hamming_clustering = 0     #Create evenly distributed clusters based on arms/barcodes
@@ -63,8 +57,6 @@ noise_types = [
     # "checkerboard",
     ]
 
-# noise_percent = [0]
-
 # Randomized seed changes to average for returns graph
 num_repeats = 1
 
@@ -78,9 +70,7 @@ for noise_type in noise_types:
     exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits
     run_experiment(exp_base, exp_difficulty)
     
-
 # Eval Model on different noise types
-
 training_epochs = 0
 noise_epochs = 50
 num_repeats = 1

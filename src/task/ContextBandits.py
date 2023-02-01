@@ -364,7 +364,7 @@ class ContextualBandit:
         """
         LSTM Input Format:
         Trial is a sequence of X one hot encoded pulls indicating the pulled arm
-        [1001010] -> human reads this as [100, barcode2, 0] would be one pull in one trial for barcode2
+        [1001010] -> human reads this as [100, barcode2 as 101, 0] would be one pull in one trial for barcode2
         this would be a pull on arm0, and based on the mapping of barcode2, returns a reward of 0
 
         one episode is a sequence of 10 trials drawn for a single barcode instance from barcode bag

@@ -32,7 +32,6 @@ class DNDLSTM(nn.Module):
         self.device = device
         self.exp_settings = exp_settings
 
-        # Testing L2RL as a benchmark for no memory R-Gate use
         self.N_GATES = 4
 
         # input-hidden weights
@@ -154,6 +153,7 @@ class DNDLSTM(nn.Module):
             if self.exp_settings["mem_store"] == "embedding":
 
                 # Saving Memory (hidden state passed into embedder, embedding is key and c_t is val)
+                # This doesn't save the hidden state, just used as a reminder
                 self.dnd.save_memory(h_t, c_t)
 
             else:

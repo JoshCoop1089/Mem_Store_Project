@@ -196,9 +196,7 @@ class DND:
         soft = torch.softmax(model_output, dim=1)
         pred_memory_id = torch.argmax(soft)
         self.pred_accuracy += int(torch.eq(pred_memory_id, real_label_id))
-
         predicted_context = self.sorted_key_list[pred_memory_id]
-        # predicted_context = torch.tensor(0, device = self.device)
 
         key_list = [
             self.keys[x][0] for x in range(len(self.keys)) if self.keys[x] != []

@@ -200,7 +200,6 @@ def run_experiment_sl(exp_settings):
         # Training with noise on?
         if exp_settings["noise_train_percent"] > 0:
             noise_barcode_flip_locs = int(
-                # exp_settings["noise_train_percent"] * len(task.cluster_lists[0][0])
                 exp_settings["noise_train_percent"] * exp_settings['barcode_size']
             )
 
@@ -209,7 +208,6 @@ def run_experiment_sl(exp_settings):
         if apply_noise >= 0:
             noise_idx = apply_noise // exp_settings["noise_eval_epochs"]
             noise_percent = exp_settings["noise_percent"][noise_idx]
-            # noise_barcode_flip_locs = int(noise_percent * len(task.cluster_lists[0][0]))
             noise_barcode_flip_locs = int(noise_percent * exp_settings['barcode_size'])
 
         # loop over the training set
@@ -360,7 +358,6 @@ def run_experiment_sl(exp_settings):
                 )
                 a_t, assumed_barcode_string, prob_a_t, v_t, entropy, h_t, c_t = output_t
                 f_t, i_t, o_t, r_gate, m_t, sim_score = cache
-                # epoch_sim_log[t+m*pulls_per_episode] += sim_score/n_epochs
 
                 # Always use ground truth bc for reward eval
                 real_bc = barcode_strings[m][0][0]
@@ -429,7 +426,7 @@ def run_experiment_sl(exp_settings):
                     mem_start, mem_stop = exp_settings['emb_mem_limits']
                     loss_vals = [x[2] for x in a_dnd.trial_buffer[mem_start:mem_stop]]
                     episode_loss = torch.stack(loss_vals).sum()
-                    a_dnd.embedder_loss[i] += episode_loss / episodes_per_epoch
+                    a_dnd.embedder_loss[i] += episode_loss / len(loss_vals)
 
                     # Unfreeze Embedder
                     for name, param in a_dnd.embedder.named_parameters():
@@ -532,7 +529,7 @@ def run_experiment_sl(exp_settings):
         if exp_settings["mem_store"] == "embedding":
             torch.save(agent.dnd.embedder.state_dict(), f"model/{exp_settings['exp_name']}_embedder.pt")
         
-        # Load clusters of barcodes
+        # Save clusters of barcodes
         np.savez(f"model/{exp_settings['exp_name']}.npz", cluster_lists = task.cluster_lists)
 
     # Final Results
@@ -630,7 +627,7 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["noise_eval_epochs"] = 0
     # What noise percent to apply during training, if any
     exp_settings["noise_train_percent"] = 0
-    exp_settings['noise_train_type'] = ""
+    exp_settings['noise_train_type'] = "right_mask"
     """
     Noise Train Types: right_mask, left_mask, none
     """
@@ -640,6 +637,9 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["hamming_threshold"] = 0
     exp_settings['emb_mem_limits'] = (0,exp_settings['pulls_per_episode'])
     exp_settings['mem_mode'] = 'LSTM'
+    """
+    Mem Modes: LSTM, two_layer
+    """
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
@@ -796,10 +796,6 @@ def run_experiment(exp_base, exp_difficulty):
                 exp_settings['lstm_learning_rate'] = 10**-3.0818
                 exp_settings['value_error_coef'] = .8046
                 exp_settings["entropy_error_coef"] = 0.0446
-                # exp_settings['embedding_size'] = int(2**8.853385)
-                # exp_settings['embedder_learning_rate'] = 10**-3.6691363948422455
-                # exp_settings['embedding_size'] = int(2**7.3127)
-                # exp_settings['embedder_learning_rate'] = 10**-3.084003903415946
                 exp_settings['dropout_coef'] = 0.363
                 if exp_settings['mem_mode'] == 'LSTM':
                     exp_settings['embedding_size'] = int(2**6.8256)
@@ -842,11 +838,6 @@ def run_experiment(exp_base, exp_difficulty):
                 exp_settings['embedder_learning_rate'] = 10**-3
                 exp_settings['dropout_coef'] = 0.0
 
-
-
-            # # LSTM on Embedder with Single layer end
-            # if exp_settings['noise_train_percent'] == 0.4:
-
     exp_length = exp_settings["epochs"] + exp_settings["noise_eval_epochs"] * len(
         exp_settings["noise_percent"]
     )
@@ -868,6 +859,8 @@ def run_experiment(exp_base, exp_difficulty):
     ), "Memory storing indicies are incorrect, verify they are between 0 and your selected number of pulls per episode"
 
     ### Beginning of Experimental Runs ###
+
+    # Info to be saves along with raw data outputs
     epoch_info = np.array(
         [
             exp_settings["epochs"],
@@ -883,8 +876,11 @@ def run_experiment(exp_base, exp_difficulty):
     # Load a pretrained model if there are no training epochs
     exp_settings['load_pretrained_model'] = (exp_settings['epochs'] == 0)
 
+    # Naming convention automation
     exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
     exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n"
+
+    # Iterate over every distinct type of memory, with repetition for reduced randomness
     for idx_mem, mem_store in enumerate(mem_store_types):
         tot_rets = np.zeros(exp_length)
         tot_acc = np.zeros(exp_length)
@@ -894,7 +890,6 @@ def run_experiment(exp_base, exp_difficulty):
         if exp_settings['emb_mem_limits'] != (0,exp_settings['pulls_per_episode']):
             exp_name += f"_{exp_settings['emb_mem_limits'][0]}-{exp_settings['emb_mem_limits'][1]}m"
         exp_settings["exp_name"] = exp_name
-
 
         # Print out current hyperparams to console
         print("\nNext Run Commencing with the following params:")
