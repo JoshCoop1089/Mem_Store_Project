@@ -633,13 +633,19 @@ def run_experiment(exp_base, exp_difficulty):
     """
     # Cosine similarity threshold for single clustering
     exp_settings["sim_threshold"] = 0
+
     # Hamming distance for multi clustering
     exp_settings["hamming_threshold"] = 0
     exp_settings['emb_mem_limits'] = (0,exp_settings['pulls_per_episode'])
+
+    # Mem Modes: LSTM, one_layer, two_layer
     exp_settings['mem_mode'] = 'LSTM'
-    """
-    Mem Modes: LSTM, two_layer
-    """
+
+    # Mem Keys before passing into embedder: Hidden, context, full
+    # HIdden - standard version LSTM1 Hidden
+    # Context - Ritter analog of only using BC into embedder
+    # Full - Pass full input into embedder
+    exp_settings['mem_store_key'] = 'hidden'
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
@@ -676,7 +682,8 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["pulls_per_episode"],
         exp_settings["sim_threshold"],
         exp_settings["noise_percent"],
-        exp_settings['emb_mem_limits']
+        exp_settings['emb_mem_limits'], 
+        exp_settings['mem_store_key']
     ) = exp_difficulty
 
     # Task Size specific hyperparams
@@ -868,7 +875,9 @@ def run_experiment(exp_base, exp_difficulty):
             exp_settings["noise_percent"],
             num_repeats,
             exp_settings['noise_type'],
-            exp_settings['noise_train_percent']
+            exp_settings['noise_train_percent'], 
+            exp_settings['mem_mode'],
+            exp_settings['mem_store_key'],
         ],
         dtype=object,
     )
@@ -887,6 +896,9 @@ def run_experiment(exp_base, exp_difficulty):
         tot_emb_acc = np.zeros(exp_length)
         exp_settings["mem_store"] = mem_store
         exp_name = exp_size + exp_other + f"_{exp_settings['mem_store']}"
+        if exp_settings['mem_store'] == 'embedding':
+            exp_name += f"_{exp_settings['mem_mode']}_{exp_settings['mem_store_key']}"
+
         if exp_settings['emb_mem_limits'] != (0,exp_settings['pulls_per_episode']):
             exp_name += f"_{exp_settings['emb_mem_limits'][0]}-{exp_settings['emb_mem_limits'][1]}m"
         exp_settings["exp_name"] = exp_name
@@ -905,6 +917,7 @@ def run_experiment(exp_base, exp_difficulty):
             )
             print(
                 f"Memory Limits: {exp_settings['emb_mem_limits'][0]}-{exp_settings['emb_mem_limits'][1]} out of {exp_settings['pulls_per_episode']}")
+            print(f"Memory Mode: {exp_settings['mem_mode']} | Memory Key into Emb: {exp_settings['mem_store_key']}")
         print(
             f"Val_CF: {round(exp_settings['value_error_coef'], 5)} | Ent_CF: {round(exp_settings['entropy_error_coef'], 5)}"
         )

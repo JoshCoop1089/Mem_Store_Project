@@ -156,6 +156,10 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
     marker_list = ["dashdot", "solid", (0, (3, 1, 1)), (0,(2,1,2))]
     for idx_mem, mem_store in enumerate(mem_store_types):
         exp_name1 = "..\\Mem_Store_Project\\data\\" + exp_name + f"_{mem_store}"
+        # if mem_store == 'embedding':
+        #     exp_name1 += "_LSTM_full"
+        #     # exp_name1 += "_one_layer"
+        #     # exp_name1 += "_two_layer"
         if mem_start != 0 and mem_store == 'embedding':
             exp_name1 += f"_{mem_start}-{mem_stop}m"
         if noise_eval:
@@ -438,6 +442,10 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
     exp_name1 = exp_size + exp_other
 
     exp_name = "..\\Mem_Store_Project\\data\\" + exp_name1 + "_" + mem_store_types
+    # if mem_store_types == 'embedding':
+    #     exp_name1 += "_LSTM_full"
+    #     # exp_name1 += "_one_layer"
+    #     # exp_name1 += "_two_layer"
     if noise_eval:
         exp_name += f"_{noise_type}_noise_eval"
     device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
@@ -621,9 +629,10 @@ if __name__ == "__main__":
 
     # stats = [5,10,10, 0.2]
     # stats = [5,10,10, 0.4]
+    # stats = [5,10,20, 0]
     # stats = [5,10,20, 0.1]
-    stats = [5,10,20, 0.2]
-    # stats = [5,10,20, 0.4]
+    # stats = [5,10,20, 0.2]
+    stats = [5,10,20, 0.4]
     # stats = [5,10,40, 0.2]
     # stats = [5,10,40, 0.4]
 
@@ -631,7 +640,8 @@ if __name__ == "__main__":
     # noise_eval = False
     # exp_types = ['embedding']
     # mem_limits = [(0,10), (1,9), (2,8), (3,7)]
-    exp_types = ['context', 'embedding', 'L2RL']
+    # exp_types = ['context', 'embedding_LSTM_hidden', 'embedding_LSTM_full', 'L2RL']
+    exp_types = ['context', 'embedding_LSTM_hidden', 'L2RL']
     mem_limits = (0,10)
 
     # mem_limits = [(0,5), (1,4)]
@@ -676,9 +686,9 @@ if __name__ == "__main__":
             # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
             # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
-            # for mem_type in exp_types:
-            #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
-            #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
+            for mem_type in exp_types:
+                exp_base = mem_type, noise_type, figure_save_location, noise_eval
+                graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
 
             # exp_base = exp_types, noise_type, figure_save_location
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')

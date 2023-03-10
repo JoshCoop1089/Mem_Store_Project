@@ -10,7 +10,21 @@ class Embedder(nn.Module):
         self.bias = bias
         self.exp_settings = exp_settings
         self.device = device
-        self.input_dim = exp_settings["dim_hidden_lstm"]
+
+        # What is being used as a key in memory?
+        # LSTM1 Hidden State (base version)
+        if exp_settings['mem_store_key'] == 'hidden':
+            self.input_dim = exp_settings["dim_hidden_lstm"]
+
+        # Ritter style barcode only
+        elif exp_settings['mem_store_key'] == 'context':
+            self.input_dim = int(
+                exp_settings['barcode_size']*(1+exp_settings['noise_train_percent']))
+
+        # The full input to LSTM1
+        elif exp_settings['mem_store_key'] == 'full':
+            self.input_dim = exp_settings['num_arms'] + int(exp_settings['barcode_size']*(1+exp_settings['noise_train_percent']))+1
+
         self.embedding_size = exp_settings["embedding_size"]
         self.num_barcodes = exp_settings["num_barcodes"]
         self.dropout_coef = exp_settings["dropout_coef"]
@@ -41,13 +55,17 @@ class Embedder(nn.Module):
 
     # Model should return an embedding and a context
     def forward(self, h):
-        if self.mem_mode == 'two_layer':
+        if self.mem_mode == 'one_layer':
+            x = self.h2m(h)
+        elif self.mem_mode == 'two_layer':
             x = self.h2m(h)
             x = nn.Dropout(self.dropout_coef)(x)
             x = self.m2c(F.leaky_relu(x))
         elif self.mem_mode == 'LSTM':
             x, (h1,c1)  = self.LSTM(h, (self.h_lstm,self.c_lstm))
             self.h_lstm, self.c_lstm = h1,c1
+        else:
+            raise ValueError("Incorrect mem_mode spelling")
         embedding = x
         predicted_context = self.e2c(F.leaky_relu(x))
 

@@ -17,10 +17,10 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 # Experiment Type and Length
 #context, embedding, L2RL
 
-exp_types = ['context', 'embedding']
+# exp_types = ['context', 'embedding']
 # exp_types = ['context', 'embedding', 'L2RL']
 # exp_types = ['context']
-# exp_types = ['embedding']
+exp_types = ['embedding']
 
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
@@ -30,6 +30,9 @@ training_epochs = 20
 noise_epochs = 5
 noise_train_percent = 0.25
 noise_train_type = 'right_mask'
+# mem_store_key = 'hidden'
+# mem_store_key = 'context'
+mem_store_key = 'full'
 
 # Experiment Difficulty
 hamming_clustering = 0     #Create evenly distributed clusters based on arms/barcodes
@@ -67,7 +70,7 @@ figure_save_location = "..\\Mem_Store_Project\\figs\\"
 # Train Model
 for noise_type in noise_types:
     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits
+    exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits, mem_store_key
     run_experiment(exp_base, exp_difficulty)
     
 # Eval Model on different noise types
@@ -89,5 +92,5 @@ noise_types = [
 
 # for noise_type in noise_types:
 #     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-#     exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits
+#     exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits, mem_store_key
 #     run_experiment(exp_base, exp_difficulty)

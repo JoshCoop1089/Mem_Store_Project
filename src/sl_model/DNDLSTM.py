@@ -120,6 +120,18 @@ class DNDLSTM(nn.Module):
                         param.requires_grad = False
 
                 # Query Memory (hidden state passed into embedder, barcode_id used for embedder loss function)
+                if self.exp_settings['mem_store_key'] == 'hidden':
+                    # Taken care of in standard code above
+                    pass
+                
+                # Ritter style barcode only
+                elif self.exp_settings['mem_store_key'] == 'context':
+                    h = barcode_tensor
+
+                # The full input to LSTM1
+                elif self.exp_settings['mem_store_key'] == 'full':
+                    h = obs_bar_reward
+
                 mem, predicted_barcode, sim_score = self.dnd.get_memory(
                     h, barcode_string, barcode_id
                 )
