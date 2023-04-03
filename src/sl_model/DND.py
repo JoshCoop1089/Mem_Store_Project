@@ -47,6 +47,9 @@ class DND:
         self.mapping = {}
         self.device = device
 
+        # This will store the input generated barcode guesses for training the embedder, and possibly for rewards
+        self.barcode_guesses = []
+
         # dynamic state
         self.encoding_off = False
         self.retrieval_off = False
@@ -196,7 +199,10 @@ class DND:
         soft = torch.softmax(model_output, dim=1)
         pred_memory_id = torch.argmax(soft)
         self.pred_accuracy += int(torch.eq(pred_memory_id, real_label_id))
-        predicted_context = self.sorted_key_list[pred_memory_id]
+        if len(self.barcode_guesses) > 0:
+            predicted_context = self.barcode_guesses[pred_memory_id]
+        else:
+            predicted_context = _empty_barcode(self.exp_settings['barcode_size'])
 
         key_list = [
             self.keys[x][0] for x in range(len(self.keys)) if self.keys[x] != []

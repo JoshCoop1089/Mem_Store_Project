@@ -235,6 +235,7 @@ optimizer = BayesianOptimization(
     verbose=2,  # verbose = 1 prints only when a maximum is observed, verbose = 0 is silent
     random_state=1,
 )
+
 # log_name = './logs_5a10b20s1h_1000_epochs_noisy_init_20_right.json'
 # log_name = './logs_5a10b20s1h_600_epochs_noisy_init_10_right.json'
 # log_name = './logs_5a10b20s1h_800_epochs_embedder_lstm_noisy_init_10_right.json'
@@ -291,7 +292,7 @@ optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
 print("New optimizer is now aware of {} points.".format(len(optimizer.space)))
 
 optimizer.maximize(
-    init_points=5,
+    init_points=0,
     n_iter=40,
 )
 

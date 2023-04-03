@@ -31,12 +31,15 @@ class DNDLSTM(nn.Module):
         self.bias = bias
         self.device = device
         self.exp_settings = exp_settings
+        self.unsure_bc_guess = 0
+        self.static_r = torch.tensor(0, device = self.device)
 
         self.N_GATES = 4
 
         # input-hidden weights
         self.i2h = nn.Linear(
             dim_input_lstm,
+            # (self.N_GATES) * dim_hidden_lstm,
             (self.N_GATES + 1) * dim_hidden_lstm,
             bias=bias,
             device=self.device,
@@ -44,10 +47,26 @@ class DNDLSTM(nn.Module):
         # hidden-hidden weights
         self.h2h = nn.Linear(
             dim_hidden_lstm,
+            # (self.N_GATES) * dim_hidden_lstm,
             (self.N_GATES + 1) * dim_hidden_lstm,
             bias=bias,
             device=self.device,
         )
+
+        # # input-R weights
+        # self.i2r = nn.Linear(
+        #     dim_input_lstm,
+        #     dim_hidden_lstm,
+        #     bias=bias,
+        #     device=self.device,
+        # )
+        # # hidden-R weights
+        # self.h2r = nn.Linear(
+        #     dim_hidden_lstm,
+        #     dim_hidden_lstm,
+        #     bias=bias,
+        #     device=self.device,
+        # )
         # dnd
         self.dnd = DND(dict_len, dim_hidden_lstm, exp_settings, self.device)
         # policy
@@ -92,6 +111,12 @@ class DNDLSTM(nn.Module):
         Wh = self.h2h(h)
         preact = Wx + Wh
 
+        # # Seperate the R_Gates for testing
+        # Rx = self.i2r(x_t)
+        # Rh = self.h2r(h)
+        # pre_r = Rx+Rh
+        # r_t = pre_r.sigmoid()
+
         # get all gate values
         gates = preact[:, : self.N_GATES * self.dim_hidden_lstm].sigmoid()
 
@@ -101,7 +126,11 @@ class DNDLSTM(nn.Module):
         o_t = gates[:, 2 * self.dim_hidden_lstm : 3 * self.dim_hidden_lstm]
         r_t = gates[:, -self.dim_hidden_lstm :]
 
+        if torch.sum(self.static_r) == 0:
+            self.static_r = torch.ones_like(r_t, device = self.device)
+
         # stuff to be written to cell state
+        # c_t_new = preact[:, (self.N_GATES-1) * self.dim_hidden_lstm :].tanh()
         c_t_new = preact[:, self.N_GATES * self.dim_hidden_lstm :].tanh()
 
         # new cell state = gated(prev_c) + gated(new_stuff)
@@ -132,6 +161,12 @@ class DNDLSTM(nn.Module):
                 elif self.exp_settings['mem_store_key'] == 'full':
                     h = obs_bar_reward
 
+                if self.exp_settings['emb_loss'] == 'kmeans':
+                    if len(self.dnd.barcode_guesses) > 0:
+                        barcode_sims = torch.nn.functional.cosine_similarity(obs_bar_reward, self.dnd.barcode_guesses)
+                        barcode_id = torch.argmax(barcode_sims).view(1)
+                        self.unsure_bc_guess += float(max(barcode_sims))
+
                 mem, predicted_barcode, sim_score = self.dnd.get_memory(
                     h, barcode_string, barcode_id
                 )
@@ -148,7 +183,10 @@ class DNDLSTM(nn.Module):
                 m_t = mem.tanh()
 
             # gate the memory; in general, can be any transformation of it
-            c_t = c_t + torch.mul(r_t, m_t)
+            if self.exp_settings['emb_loss'] == 'contrastive' and self.exp_settings['hold_r_gate_open']:
+                c_t = c_t + torch.mul(self.static_r, m_t)
+            else:
+                c_t = c_t + torch.mul(r_t, m_t)
 
         # get gated hidden state from the cell state
         h_t = torch.mul(o_t, c_t.tanh())

@@ -121,3 +121,15 @@ def compute_a2c_loss(probs, values, returns, entropy):
     loss_value = torch.stack(value_losses).sum()
     entropies = torch.stack(entropy).sum()
     return loss_policy, loss_value, entropies
+
+def vectorize_cos_sim(input1, input2, device):
+    dot = input1@input2.t()
+    norm1 = torch.norm(input1,2,1).to(device)
+    norm2 = torch.norm(input2,2,1).to(device)
+    s = torch.ones_like(dot, device = device)
+
+    for i in range(input1.size()[0]):
+        for j in range(input1.size()[0]):
+            s[i][j] = norm1[i].item()*norm2[j].item()
+    x = torch.div(dot,s)
+    return x

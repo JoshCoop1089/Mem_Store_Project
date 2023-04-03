@@ -42,6 +42,7 @@ class Embedder(nn.Module):
             self.embedding_size, self.num_barcodes, bias=bias, device=device
         )
 
+        # LSTM2 Core
         self.LSTM = nn.LSTM(input_size = self.input_dim, hidden_size = self.embedding_size, device = self.device)
         self.h_lstm, self.c_lstm = self.emb_get_init_states()
 

@@ -51,18 +51,18 @@ def plot_tsne_distribution(
     for loc_id, c_id in enumerate(mapping.keys()):
         cluster_id[c_id] = loc_id//(len(mapping.keys())//2)
 
-    # Find avg hamming distance given cluster id
-    ham_avg = [0]*(2)
-    clusters = [[],[]]
-    for bc, c_id in cluster_id.items():
-        clusters[c_id].append(bc)
-    for c_id, cluster in enumerate(clusters):
-        for bc in cluster:
-            for bc1 in cluster:
-                ham_avg[c_id] += hamming_distance(bc, bc1)
+    # # Find avg hamming distance given cluster id
+    # ham_avg = [0]*(2)
+    # clusters = [[],[]]
+    # for bc, c_id in cluster_id.items():
+    #     clusters[c_id].append(bc)
+    # for c_id, cluster in enumerate(clusters):
+    #     for bc in cluster:
+    #         for bc1 in cluster:
+    #             ham_avg[c_id] += hamming_distance(bc, bc1)
     
-    # ham_avg [x/len(mapping.keys())/2)**2 for x in ham_avg]
-    print(ham_avg)
+    # # ham_avg [x/len(mapping.keys())/2)**2 for x in ham_avg]
+    # print(ham_avg)
 
     # Seperate by barcode
     classes = {k: [] for k in mapping.keys()}
@@ -624,15 +624,16 @@ if __name__ == "__main__":
     # stats = [4,8,24, 0.25]
     # stats = [4,8,40]
     # stats = [2,4,8, 0.2]
-    # stats = [6,12,24]
-    # stats = [6,12,40]
+    # stats = [6,12,24, 0.25]
+    # stats = [10,20,40,0.25]
+    stats = [8,16,40, 0.2]
 
     # stats = [5,10,10, 0.2]
     # stats = [5,10,10, 0.4]
     # stats = [5,10,20, 0]
     # stats = [5,10,20, 0.1]
     # stats = [5,10,20, 0.2]
-    stats = [5,10,20, 0.4]
+    # stats = [5,10,20, 0.4]
     # stats = [5,10,40, 0.2]
     # stats = [5,10,40, 0.4]
 
@@ -642,10 +643,12 @@ if __name__ == "__main__":
     # mem_limits = [(0,10), (1,9), (2,8), (3,7)]
     # exp_types = ['context', 'embedding_LSTM_hidden', 'embedding_LSTM_full', 'L2RL']
     exp_types = ['context', 'embedding_LSTM_hidden', 'L2RL']
+    # exp_types = ['embedding_LSTM_hidden']
+    # exp_types = ['context', 'L2RL']
     mem_limits = (0,10)
 
-    # mem_limits = [(0,5), (1,4)]
-    # mem_limits = (1,9)
+    # mem_limits = [(0,10), (2,10), (8,10)]
+    # mem_limits = (8,10)
 
     num_arms = stats[0]
     num_barcodes = stats[1]
@@ -686,9 +689,9 @@ if __name__ == "__main__":
             # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
             # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
-            for mem_type in exp_types:
-                exp_base = mem_type, noise_type, figure_save_location, noise_eval
-                graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
+            # for mem_type in exp_types:
+            #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
+            #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
 
             # exp_base = exp_types, noise_type, figure_save_location
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')
