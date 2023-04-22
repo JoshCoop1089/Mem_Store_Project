@@ -469,7 +469,12 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
         for idx_mem, memory in enumerate(all_keys[0:4]):
             # T-SNE to visualize keys in memory
             embeddings = [x[0] for x in memory]
-            labels = [x[1] for x in memory]
+            try:
+                labels = [x[4] for x in memory]
+            except Exception as e:
+                # print(e)
+                labels = [x[1] for x in memory]
+
 
             # Artifically boost datapoint count to make tsne nicer
             while len(embeddings) < 100:
@@ -499,8 +504,11 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
     for idx_mem, memory in enumerate(all_keys[key_start:]):
         # T-SNE to visualize keys in memory
         embeddings = [x[0] for x in memory]
-        labels = [x[1] for x in memory]
-
+        try:
+            labels = [x[4] for x in memory]
+        except Exception as e:
+            # print(e)
+            labels = [x[1] for x in memory]
         # Artifically boost datapoint count to make tsne nicer
         while len(embeddings) < 100:
             embeddings.extend(embeddings)
@@ -623,10 +631,10 @@ if __name__ == "__main__":
     # Experiment Difficulty
     # stats = [4,8,24, 0.25]
     # stats = [4,8,40]
-    # stats = [2,4,8, 0.2]
+    stats = [2,4,8, 0.2]
     # stats = [6,12,24, 0.25]
     # stats = [10,20,40,0.25]
-    stats = [8,16,40, 0.2]
+    # stats = [8,16,40, 0.2]
 
     # stats = [5,10,10, 0.2]
     # stats = [5,10,10, 0.4]
@@ -637,13 +645,14 @@ if __name__ == "__main__":
     # stats = [5,10,40, 0.2]
     # stats = [5,10,40, 0.4]
 
-    noise_eval = True
-    # noise_eval = False
+    # noise_eval = True
+    noise_eval = False
     # exp_types = ['embedding']
     # mem_limits = [(0,10), (1,9), (2,8), (3,7)]
     # exp_types = ['context', 'embedding_LSTM_hidden', 'embedding_LSTM_full', 'L2RL']
-    exp_types = ['context', 'embedding_LSTM_hidden', 'L2RL']
+    # exp_types = ['context', 'embedding_LSTM_hidden', 'L2RL']
     # exp_types = ['embedding_LSTM_hidden']
+    exp_types = ['embedding_LSTM_hidden', 'embedding_LSTM_hidden']
     # exp_types = ['context', 'L2RL']
     mem_limits = (0,10)
 
@@ -689,9 +698,9 @@ if __name__ == "__main__":
             # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
             # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
-            # for mem_type in exp_types:
-            #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
-            #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
+            for mem_type in exp_types:
+                exp_base = mem_type, noise_type, figure_save_location, noise_eval
+                graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
 
             # exp_base = exp_types, noise_type, figure_save_location
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')

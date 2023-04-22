@@ -379,6 +379,7 @@ def run_experiment_sl(exp_settings):
                     output_t, cache = agent(
                         input_to_lstm,
                         raw_bc,
+                        real_bc,
                         mem_key,
                         cross_ent_loss_tensor,
                         h_t,
@@ -478,7 +479,7 @@ def run_experiment_sl(exp_settings):
                             embB_stack = embA_stack
                             episode_loss = ((pos_output+neg_output)/2).clone().detach().requires_grad_(True)
 
-                        elif exp_settings['emb_loss'] == 'kmeans':
+                        elif exp_settings['emb_loss'] == 'groundtruth' or exp_settings['emb_loss'] == 'kmeans':
                             # Only use loss for memories stored (check DND.py save_mem function to be sure)
                             loss_vals = [x[2] for x in a_dnd.trial_buffer[mem_start:mem_stop]]
                             episode_loss = torch.stack(loss_vals).sum()
@@ -530,7 +531,7 @@ def run_experiment_sl(exp_settings):
                 log_loss_policy[i] += torch.div(loss_policy, episodes_per_epoch)
                 log_loss_total[i] += torch.div(loss, episodes_per_epoch)
 
-            if i == 0:
+            if i == 0 and exp_settings['emb_loss'] == 'kmeans':
                 km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 10, max_iter = 300)
                 y_km = km.fit_predict(avg_inputs)
                 agent.dnd.barcode_guesses = torch.as_tensor(km.cluster_centers_, device = device)

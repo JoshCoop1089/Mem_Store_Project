@@ -139,9 +139,9 @@ class DND:
 
         # Append new memories at head of list to allow sim search to find these first
         # for embedding, real_bc, _, model_predicted_bc, mem_pred_bc in self.trial_hidden_states:
-        for embedding, real_bc, _, model_predicted_bc, mem_pred_bc in mem_restriction_trial:
+        for embedding, real_bc, _, model_predicted_bc, mem_pred_bc, barcode_string_noised in mem_restriction_trial:
             self.keys = [
-                [torch.squeeze(embedding.detach()), real_bc, model_predicted_bc, mem_pred_bc]
+                [torch.squeeze(embedding.detach()), real_bc, model_predicted_bc, mem_pred_bc, barcode_string_noised]
             ] + self.keys
             self.vals = [torch.squeeze(memory_val.detach())] + self.vals
 
@@ -166,7 +166,7 @@ class DND:
             self.vals.pop()
         return
 
-    def get_memory(self, query_key, real_label_as_string, real_label_id):
+    def get_memory(self, query_key, real_label_as_string, real_label_id, barcode_string_noised):
         """
         Embedder memory version:
 
@@ -220,7 +220,7 @@ class DND:
         else:
             self.trial_buffer.append(
                 (embedding, real_label_as_string, emb_loss, predicted_context,
-                 _empty_barcode(self.exp_settings["barcode_size"]))
+                 _empty_barcode(self.exp_settings["barcode_size"]), barcode_string_noised)
             )
             return (
                 _empty_memory(self.hidden_lstm_dim, device=self.device),
@@ -230,7 +230,7 @@ class DND:
 
         # Store embedding and predicted class label memory index in trial_buffer
         self.trial_buffer.append(
-            (embedding, real_label_as_string, emb_loss, predicted_context, mem_predicted_context)
+            (embedding, real_label_as_string, emb_loss, predicted_context, mem_predicted_context, barcode_string_noised)
         )
 
         # # Prototype memory gating

@@ -87,7 +87,7 @@ class DNDLSTM(nn.Module):
             elif "bias" in name:
                 torch.nn.init.constant_(wts, 0)
 
-    def forward(self, obs_bar_reward, barcode_string, barcode_tensor, barcode_id, h, c):
+    def forward(self, obs_bar_reward, barcode_string, barcode_string_noised, barcode_tensor, barcode_id, h, c):
 
         # Into LSTM
         x_t = obs_bar_reward
@@ -168,7 +168,7 @@ class DNDLSTM(nn.Module):
                         self.unsure_bc_guess += float(max(barcode_sims))
 
                 mem, predicted_barcode, sim_score = self.dnd.get_memory(
-                    h, barcode_string, barcode_id
+                    h, barcode_string, barcode_id, barcode_string_noised
                 )
                 m_t = mem.tanh()
 

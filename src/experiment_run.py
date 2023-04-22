@@ -26,7 +26,7 @@ try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
-training_epochs = 10
+training_epochs = 40
 noise_epochs = 2
 noise_train_percent = 0.2
 noise_train_type = 'right_mask'
@@ -91,7 +91,7 @@ noise_types = [
     # "checkerboard",
     ]
 
-# for noise_type in noise_types:
-#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-#     exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits, mem_store_key
-#     run_experiment(exp_base, exp_difficulty)
+for noise_type in noise_types:
+    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+    exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits, mem_store_key
+    run_experiment(exp_base, exp_difficulty)
