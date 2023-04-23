@@ -195,10 +195,6 @@ def run_experiment_sl(exp_settings):
         with torch.no_grad() if i >= exp_settings['epochs'] else nullcontext():
             time_start = time.perf_counter()
 
-            # Experimenting with R-Gate values
-            if exp_settings['freeze_r_gate'] and exp_settings['emb_loss'] == 'contrastive':
-                exp_settings['hold_r_gate_open'] = (i < 0.1*exp_settings['epochs'])
-
             # get data for this epoch
             (
                 observations_barcodes_rewards,
@@ -478,6 +474,7 @@ def run_experiment_sl(exp_settings):
                                 neg_output = torch.sum(neg_dist)
                             embB_stack = embA_stack
                             episode_loss = ((pos_output+neg_output)/2).clone().detach().requires_grad_(True)
+                            a_dnd.embedder_loss[i] += episode_loss
 
                         elif exp_settings['emb_loss'] == 'groundtruth' or exp_settings['emb_loss'] == 'kmeans':
                             # Only use loss for memories stored (check DND.py save_mem function to be sure)
@@ -516,6 +513,11 @@ def run_experiment_sl(exp_settings):
                     optimizer.step()
                     optimizer.zero_grad()
 
+                    # Reset the original values of the R-Gates after backprop to keep them frozen and open
+                    if i < exp_settings['freeze_r_gates']:
+                        agent.i2h.weight[3*dim_hidden_lstm:4*dim_hidden_lstm].data = agent.i2h_r_gates
+                        agent.h2h.weight[3*dim_hidden_lstm:4*dim_hidden_lstm].data = agent.h2h_r_gates
+
                 # Updating avg return per episode
                 log_return[i] += torch.div(
                     cumulative_reward, (episodes_per_epoch * pulls_per_episode)
@@ -550,17 +552,29 @@ def run_experiment_sl(exp_settings):
 
             # Print reports every 10% of the total number of epochs
             if i % (int(n_epochs / 10)) == 0 or i == n_epochs - 1:
-                print(
-                    "Epoch %3d | avg_return = %.2f | loss: val = %.2f, pol = %.2f, tot = %.2f | time = %.2f"
-                    % (
-                        i,
-                        log_return[i],
-                        log_loss_value[i],
-                        log_loss_policy[i],
-                        log_loss_total[i],
-                        run_time[i],
+                if exp_settings['mem_store'] == 'embedding':
+                    print(
+                        "Epoch %3d | avg_return = %.2f | loss: LSTM = %.2f, Embedder = %.2f | time = %.2f"
+                        % (
+                            i,
+                            log_return[i],
+                            log_loss_total[i],
+                            agent.dnd.embedder_loss[i],
+                            run_time[i],
+                        )
                     )
-                )
+                else:
+                    print(
+                        "Epoch %3d | avg_return = %.2f | loss: val = %.2f, pol = %.2f, tot = %.2f | time = %.2f"
+                        % (
+                            i,
+                            log_return[i],
+                            log_loss_value[i],
+                            log_loss_policy[i],
+                            log_loss_total[i],
+                            run_time[i],
+                        )
+                    )
                 # Accuracy over the last 10 epochs
                 if i > 11:
                     avg_acc = log_memory_accuracy[i - 9 : i + 1].mean()
@@ -575,7 +589,8 @@ def run_experiment_sl(exp_settings):
                         avg_bc_acc = log_bc_guess_accuracy[1: i + 1].mean()
                     
                 print("  Mem Acc:", round(avg_acc, 4), end=" | ")
-                print("BC Acc:", round(avg_bc_acc, 4), end=" | ")
+                if exp_settings['emb_loss'] == 'kmeans':
+                    print("BC Acc:", round(avg_bc_acc, 4), end=" | ")
                 if exp_settings['mem_store'] == 'embedding':
                     print("Model Acc:", round(avg_emb_acc, 4), end=" | ")
                 print(f"Time Elapsed: {round(sum(run_time), 1)} secs")
@@ -708,11 +723,11 @@ def run_experiment(exp_base, exp_difficulty):
     # Context - Ritter analog of only using BC into embedder
     # Full - Pass full input into embedder
     exp_settings['mem_store_key'] = 'hidden'
-    # exp_settings['emb_loss'] = 'contrastive'
-    exp_settings['emb_loss'] = 'kmeans'
+    exp_settings['emb_loss'] = 'contrastive'
+    # exp_settings['emb_loss'] = 'kmeans'
 
     # Stopping Early training R_Gate updates
-    exp_settings['freeze_r_gate'] = False
+    exp_settings['freeze_r_gates'] = 0
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
@@ -833,9 +848,10 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings['lstm_learning_rate'] = 10**-3.0788
         exp_settings['value_error_coef'] = 0.9407
         exp_settings["entropy_error_coef"] = 0.006
-        exp_settings['embedding_size'] = int(2**7.5208)
-        exp_settings['embedder_learning_rate'] = 10**-3.5561
+        exp_settings['embedding_size'] = int(2**7.51)
+        exp_settings['embedder_learning_rate'] = 10**-3.89
         exp_settings['dropout_coef'] = 0
+
     if exp_settings['num_arms'] == 5 and exp_settings['num_barcodes'] == 10:
         if exp_settings['barcode_size'] == 10:
             if exp_settings['noise_train_percent'] == 0.2:
@@ -892,6 +908,10 @@ def run_experiment(exp_base, exp_difficulty):
                     # Hidden LSTM1 passed into LSTM2
                     exp_settings['embedding_size'] = int(2**6.8256)
                     exp_settings['embedder_learning_rate'] = 10**-3.03456
+                    
+                    if exp_settings['emb_loss'] == 'kmeans':
+                        exp_settings['embedding_size'] = int(2**7.93)
+                        exp_settings['embedder_learning_rate'] = 10**-3.282
 
                     # Full input passed into LSTM2 Single Layer embedder
                     if exp_settings['mem_store_key'] == 'full':
@@ -944,6 +964,8 @@ def run_experiment(exp_base, exp_difficulty):
     exp_length = exp_settings["epochs"] + exp_settings["noise_eval_epochs"] * len(
         exp_settings["noise_percent"]
     )
+    if exp_settings['epochs'] > 0 and exp_settings['emb_loss'] == 'contrastive':
+        exp_settings['freeze_r_gates'] = 0.1*exp_length
 
     # Safety Assertions
     assert exp_length >= 10, "Total number of epochs must be greater than 10"
@@ -974,6 +996,7 @@ def run_experiment(exp_base, exp_difficulty):
             exp_settings['noise_train_percent'], 
             exp_settings['mem_mode'],
             exp_settings['mem_store_key'],
+            exp_settings['emb_loss']
         ],
         dtype=object,
     )
@@ -990,6 +1013,7 @@ def run_experiment(exp_base, exp_difficulty):
         tot_rets = np.zeros(exp_length)
         tot_acc = np.zeros(exp_length)
         tot_emb_acc = np.zeros(exp_length)
+        tot_emb_loss = np.zeros(exp_length)
         exp_settings["mem_store"] = mem_store
         exp_name = exp_size + exp_other + f"_{exp_settings['mem_store']}"
         if exp_settings['mem_store'] == 'embedding':
@@ -1039,6 +1063,7 @@ def run_experiment(exp_base, exp_difficulty):
             tot_rets += log_return / num_repeats
             tot_acc += log_memory_accuracy / num_repeats
             tot_emb_acc += log_embedder_accuracy / num_repeats
+            tot_emb_loss += embedder_loss / num_repeats
 
         if exp_length >= 200:
             if exp_settings["epochs"] < 25:
@@ -1056,6 +1081,7 @@ def run_experiment(exp_base, exp_difficulty):
                 tot_acc=tot_acc,
                 epoch_mapping=epoch_mapping,
                 epoch_info=epoch_info,
-                tot_emb_acc=tot_emb_acc
+                tot_emb_acc=tot_emb_acc,
+                tot_emb_loss=tot_emb_loss
             )
     ### End of Experiment Data

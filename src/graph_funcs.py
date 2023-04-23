@@ -149,7 +149,7 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
     exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
     exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n"
     exp_name = exp_size + exp_other
-
+    
 
     # LOWESS Smoothed Graphs
     frac = 0.05
@@ -166,6 +166,19 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
             exp_name1 += f"_{noise_type}_noise_eval"
         exp_name1 += ".npz"
 
+        exp_len = np.load(exp_name1, allow_pickle=True)["epoch_info"]
+        exp_settings["epochs"] = exp_len[0]
+        exp_settings["noise_eval_epochs"] = exp_len[1]
+        exp_settings["noise_percent"] = exp_len[2]
+        try:
+            num_repeats = exp_len[3]
+        except:
+            num_repeats = 1
+        try:
+            noise_type = exp_len[4]
+        except:
+            noise_type = "random"
+
         # Returns
         if graph_type == "Returns":
             axes.set_ylim([0.1, 0.9])
@@ -175,6 +188,10 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
         elif graph_type == "Accuracy":
             axes.set_ylim([0, 1])
             data = np.load(exp_name1)["tot_acc"]
+
+        # Embedder Loss
+        elif graph_type == "Embedder Loss":
+            data = np.load(exp_name1)["tot_emb_loss"][:exp_settings['epochs']]
 
         in_array = np.arange(len(data))
         lowess_data = lowess(data, in_array, frac=frac, return_sorted=False)
@@ -212,18 +229,6 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
             pass
 
 
-    exp_len = np.load(exp_name1, allow_pickle=True)["epoch_info"]
-    exp_settings["epochs"] = exp_len[0]
-    exp_settings["noise_eval_epochs"] = exp_len[1]
-    exp_settings["noise_percent"] = exp_len[2]
-    try:
-        num_repeats = exp_len[3]
-    except:
-        num_repeats = 1
-    try:
-        noise_type = exp_len[4]
-    except:
-        noise_type = "random"
 
     # Graph Labeling and Misc Stuff
     if exp_settings["hamming_threshold"]:
@@ -322,6 +327,10 @@ def graph_multi_mem_limits(exp_base, exp_difficulty, graph_type, use_lowess=True
                 elif graph_type == "Accuracy":
                     axes.set_ylim([0, 1])
                     data = np.load(exp_name1)["tot_acc"]
+
+                # Embedder Loss
+                elif graph_type == "Embedder Loss":
+                    data = np.load(exp_name1)["tot_emb_loss"]
             except:
                 continue
 
@@ -631,10 +640,10 @@ if __name__ == "__main__":
     # Experiment Difficulty
     # stats = [4,8,24, 0.25]
     # stats = [4,8,40]
-    stats = [2,4,8, 0.2]
+    # stats = [2,4,8, 0.2]
     # stats = [6,12,24, 0.25]
     # stats = [10,20,40,0.25]
-    # stats = [8,16,40, 0.2]
+    stats = [8,16,40, 0.2]
 
     # stats = [5,10,10, 0.2]
     # stats = [5,10,10, 0.4]
@@ -645,14 +654,14 @@ if __name__ == "__main__":
     # stats = [5,10,40, 0.2]
     # stats = [5,10,40, 0.4]
 
-    # noise_eval = True
-    noise_eval = False
+    noise_eval = True
+    # noise_eval = False
     # exp_types = ['embedding']
     # mem_limits = [(0,10), (1,9), (2,8), (3,7)]
     # exp_types = ['context', 'embedding_LSTM_hidden', 'embedding_LSTM_full', 'L2RL']
-    # exp_types = ['context', 'embedding_LSTM_hidden', 'L2RL']
+    exp_types = ['context', 'embedding_LSTM_hidden', 'L2RL']
     # exp_types = ['embedding_LSTM_hidden']
-    exp_types = ['embedding_LSTM_hidden', 'embedding_LSTM_hidden']
+    # exp_types = ['embedding_LSTM_hidden', 'embedding_LSTM_hidden']
     # exp_types = ['context', 'L2RL']
     mem_limits = (0,10)
 
@@ -695,12 +704,13 @@ if __name__ == "__main__":
         if len(exp_types) != 1:
             graph_with_lowess_smoothing(exp_base, exp_difficulty, "Returns")
             graph_with_lowess_smoothing(exp_base, exp_difficulty, "Accuracy")
+            # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Loss")
             # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
             # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
-            for mem_type in exp_types:
-                exp_base = mem_type, noise_type, figure_save_location, noise_eval
-                graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
+            # for mem_type in exp_types:
+            #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
+            #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
 
             # exp_base = exp_types, noise_type, figure_save_location
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')

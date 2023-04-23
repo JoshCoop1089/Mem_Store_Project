@@ -26,7 +26,7 @@ try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
-training_epochs = 40
+training_epochs = 300
 noise_epochs = 2
 noise_train_percent = 0.2
 noise_train_type = 'right_mask'
@@ -76,7 +76,7 @@ for noise_type in noise_types:
     
 # Eval Model on different noise types
 training_epochs = 0
-noise_epochs = 10
+noise_epochs = 35
 num_repeats = 1
 noise_percent = [4/20, 6/20, 8/20, 10/20, 12/20, 14/20]
 # noise_percent = [6/24, 8/24, 10/24, 12/24, 14/24, 16/24]
@@ -85,13 +85,13 @@ noise_percent = [4/20, 6/20, 8/20, 10/20, 12/20, 14/20]
 noise_types = [
     # False,
     "right_mask",
-    # "random",
+    "random",
     # "left_mask",
     # "center_mask",
     # "checkerboard",
     ]
 
-for noise_type in noise_types:
-    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits, mem_store_key
-    run_experiment(exp_base, exp_difficulty)
+# for noise_type in noise_types:
+#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#     exp_difficulty = hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode, sim_threshold, noise_percent, mem_limits, mem_store_key
+#     run_experiment(exp_base, exp_difficulty)
