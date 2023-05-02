@@ -13,7 +13,8 @@ from sl_model.utils import (
     compute_a2c_loss,
     compute_returns,
     get_reward_from_assumed_barcode,
-    vectorize_cos_sim
+    vectorize_cos_sim,
+    freeze_linear_params
 )
 from task.ContextBandits import ContextualBandit
 from sklearn.cluster import KMeans
@@ -124,6 +125,12 @@ def run_experiment_sl(exp_settings):
         filter(lambda p: p.requires_grad, agent.parameters()), lr=learning_rate
     )
 
+    # Freeze a portion of the layers to simulate keeping the R-Gates open for the first portion of training
+    if exp_settings['epochs'] > 0:
+        r_gate_indicies = [x for x in range(3*dim_hidden_lstm,4*dim_hidden_lstm)]
+        i2h_weight_hook, i2h_bias_hook = freeze_linear_params(agent.i2h, r_gate_indicies)
+        h2h_weight_hook, h2h_bias_hook = freeze_linear_params(agent.h2h, r_gate_indicies)
+
     if exp_settings["load_pretrained_model"]:
         # Load trained weights
         agent.load_state_dict(torch.load(f"model/{exp_settings['exp_name']}.pt", map_location = device))
@@ -228,7 +235,7 @@ def run_experiment_sl(exp_settings):
 
                 # prealloc
                 agent.dnd.pred_accuracy = 0
-                agent.unsure_bc_guess = 0
+                agent.unsure_bc_guess = torch.Tensor([0.0]).to(device)
                 memory_accuracy = 0
                 cumulative_reward = 0
                 probs, rewards, values, entropies = [], [], [], []
@@ -236,7 +243,6 @@ def run_experiment_sl(exp_settings):
                 if exp_settings['mem_store'] == 'embedding':
                     emb_model = agent.dnd.embedder
                     emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states()
-
 
                 # Always use ground truth bc for reward eval
                 real_bc = barcode_strings[m][0][0]
@@ -373,13 +379,13 @@ def run_experiment_sl(exp_settings):
                     )
 
                     output_t, cache = agent(
-                        input_to_lstm,
-                        raw_bc,
-                        real_bc,
-                        mem_key,
-                        cross_ent_loss_tensor,
-                        h_t,
-                        c_t,
+                        input_to_lstm,          #Tensor made of arm choice, noised BC, and reward
+                        raw_bc,                 #String version of context BC, no noise
+                        real_bc,                #String version of context BC, with noise
+                        mem_key,                #Tensor version of context BC, with noise
+                        cross_ent_loss_tensor,  #BC Class ID for embedder loss
+                        h_t,                    #Hidden state of LSTM
+                        c_t,                    #Cell State of LSTM
                     )
 
                     a_t, assumed_barcode_string, prob_a_t, v_t, entropy, h_t, c_t = output_t
@@ -400,7 +406,7 @@ def run_experiment_sl(exp_settings):
                     cumulative_reward += r_t
 
                     # Store inputs to id barcodes with k-means
-                    if i == 0:
+                    if i == 0 and exp_settings['emb_loss'] == 'kmeans':
                         avg_inputs[m*pulls_per_episode + t] += input_to_lstm.view(-1).cpu().numpy()
 
                     # Inputs to LSTM come from predicted actions and rewards of last time step
@@ -412,8 +418,13 @@ def run_experiment_sl(exp_settings):
 
                     # Add noise to the barcode at the right moments in experiment
                     if (
+                        # Noise during training phase if noise being used in training
                         exp_settings["noise_train_percent"] and i < exp_settings["epochs"]
-                    ) or (i >= exp_settings["epochs"]):
+                        ) or (
+                        # Noise during eval phase
+                        i >= exp_settings["epochs"]
+                    ):
+
                         next_bc = noisy_bc
 
                     # Create next input to feed back into LSTM
@@ -450,7 +461,8 @@ def run_experiment_sl(exp_settings):
                         a_dnd = agent.dnd
                         mem_start, mem_stop = exp_settings['emb_mem_limits']
                         
-                        if exp_settings['emb_loss'] == 'contrastive':
+                        if exp_settings['emb_loss'] != 'kmeans':
+                            # 'contrastive':
                             """
                             embA are from current episode
                             create all pairs from embA, label as similar
@@ -470,13 +482,20 @@ def run_experiment_sl(exp_settings):
                             if m > 0:
                                 negs = vectorize_cos_sim(
                                     embA_stack, embB_stack, device)
-                                neg_dist = torch.ones_like(negs, device = device)-negs
-                                neg_output = torch.sum(neg_dist)
+                                # Far apart negatives should not conribute to loss bc cos will be closer to 0
+                                # neg_dist = torch.ones_like(negs, device = device)-negs
+
+                                neg_output = torch.sum(negs)
                             embB_stack = embA_stack
-                            episode_loss = ((pos_output+neg_output)/2).clone().detach().requires_grad_(True)
+                            episode_loss = (pos_output+neg_output).detach().clone().requires_grad_(True)
                             a_dnd.embedder_loss[i] += episode_loss
 
-                        elif exp_settings['emb_loss'] == 'groundtruth' or exp_settings['emb_loss'] == 'kmeans':
+                            if exp_settings['emb_loss'] == 'groundtruth':
+                                loss_vals = [x[2] for x in a_dnd.trial_buffer[mem_start:mem_stop]]
+                                episode_loss = torch.stack(loss_vals).sum()
+
+
+                        elif exp_settings['emb_loss'] == 'kmeans':
                             # Only use loss for memories stored (check DND.py save_mem function to be sure)
                             loss_vals = [x[2] for x in a_dnd.trial_buffer[mem_start:mem_stop]]
                             episode_loss = torch.stack(loss_vals).sum()
@@ -513,18 +532,20 @@ def run_experiment_sl(exp_settings):
                     optimizer.step()
                     optimizer.zero_grad()
 
-                    # Reset the original values of the R-Gates after backprop to keep them frozen and open
-                    if i < exp_settings['freeze_r_gates']:
-                        agent.i2h.weight[3*dim_hidden_lstm:4*dim_hidden_lstm].data = agent.i2h_r_gates
-                        agent.h2h.weight[3*dim_hidden_lstm:4*dim_hidden_lstm].data = agent.h2h_r_gates
-
+                    # Reset the hook on the R-Gates after having kept them frozen until a specified epoch
+                    if i == exp_settings['freeze_r_gates'] and i > 0 and m == 0 and exp_settings['epochs'] > 0:
+                        i2h_weight_hook.remove()
+                        i2h_bias_hook.remove()
+                        h2h_weight_hook.remove()
+                        h2h_bias_hook.remove()
+                        
                 # Updating avg return per episode
                 log_return[i] += torch.div(
                     cumulative_reward, (episodes_per_epoch * pulls_per_episode)
                 )
 
                 # Updating avg accuracy per episode
-                log_bc_guess_accuracy[i] += agent.unsure_bc_guess/(episodes_per_epoch*pulls_per_episode)
+                log_bc_guess_accuracy[i] += torch.div(agent.unsure_bc_guess, (episodes_per_epoch*pulls_per_episode))
                 log_embedder_accuracy[i] += torch.div(agent.dnd.pred_accuracy, (episodes_per_epoch*pulls_per_episode))
                 log_memory_accuracy[i] += torch.div(memory_accuracy, (episodes_per_epoch*pulls_per_episode))
 
@@ -543,6 +564,7 @@ def run_experiment_sl(exp_settings):
                 tb.add_scalar("LSTM Returns", log_return[i], i)
                 tb.add_scalar("Mem Retrieval Accuracy", log_memory_accuracy[i], i)
                 tb.add_scalar("Emb Retrieval Accuracy", log_embedder_accuracy[i], i)
+                tb.add_scalar("Emb Loss", agent.dnd.embedder_loss[i], i)
                 if i < exp_settings["epochs"]:
                     tb.add_histogram("R-Gate Weights Train Epochs", r_gate, i)
                 else:
@@ -674,7 +696,7 @@ def run_experiment(exp_base, exp_difficulty):
 
     # Task Info
     exp_settings["kernel"] = "cosine"  # Cosine, l2
-    exp_settings["mem_store"] = "context"  # Context, embedding, hidden, L2RL
+    exp_settings["mem_store"] = "context"  # Context, embedding, L2RL
 
     # Noise Parameters
     # Always flip bit for noise instead of coin flip chance
@@ -723,8 +745,14 @@ def run_experiment(exp_base, exp_difficulty):
     # Context - Ritter analog of only using BC into embedder
     # Full - Pass full input into embedder
     exp_settings['mem_store_key'] = 'hidden'
-    exp_settings['emb_loss'] = 'contrastive'
+
+    # Loss Types for Embedder
+    # exp_settings['emb_loss'] = 'contrastive'
     # exp_settings['emb_loss'] = 'kmeans'
+    exp_settings['emb_loss'] = 'groundtruth'
+
+    # Evaluate Emb Model without Mem
+    exp_settings['emb_with_mem'] = True
 
     # Stopping Early training R_Gate updates
     exp_settings['freeze_r_gates'] = 0
@@ -745,7 +773,6 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["value_error_coef"] = 0.62
     exp_settings["dropout_coef"] = 0
     
-
     # Experimental Variables
     (
         mem_store_types,
@@ -765,7 +792,9 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["sim_threshold"],
         exp_settings["noise_percent"],
         exp_settings['emb_mem_limits'], 
-        exp_settings['mem_store_key']
+        exp_settings['mem_store_key'],
+        exp_settings['emb_loss'],
+        exp_settings['emb_with_mem']
     ) = exp_difficulty
 
     # Task Size specific hyperparams
@@ -961,11 +990,13 @@ def run_experiment(exp_base, exp_difficulty):
                 if exp_settings['mem_store_key'] == 'full':
                     exp_settings['embedding_size'] = int(2**6.6714)
                     exp_settings['embedder_learning_rate'] = 10**-4.8664
+    
     exp_length = exp_settings["epochs"] + exp_settings["noise_eval_epochs"] * len(
         exp_settings["noise_percent"]
     )
+
     if exp_settings['epochs'] > 0 and exp_settings['emb_loss'] == 'contrastive':
-        exp_settings['freeze_r_gates'] = 0.1*exp_length
+        exp_settings['freeze_r_gates'] = int(0.1*exp_length)
 
     # Safety Assertions
     assert exp_length >= 10, "Total number of epochs must be greater than 10"
@@ -996,7 +1027,8 @@ def run_experiment(exp_base, exp_difficulty):
             exp_settings['noise_train_percent'], 
             exp_settings['mem_mode'],
             exp_settings['mem_store_key'],
-            exp_settings['emb_loss']
+            exp_settings['emb_loss'],
+            exp_settings['emb_with_mem']
         ],
         dtype=object,
     )
@@ -1017,7 +1049,7 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["mem_store"] = mem_store
         exp_name = exp_size + exp_other + f"_{exp_settings['mem_store']}"
         if exp_settings['mem_store'] == 'embedding':
-            exp_name += f"_{exp_settings['mem_mode']}_{exp_settings['mem_store_key']}"
+            exp_name += f"_{exp_settings['mem_mode']}_{exp_settings['mem_store_key']}_{exp_settings['emb_loss']}"
 
         if exp_settings['emb_mem_limits'] != (0,exp_settings['pulls_per_episode']):
             exp_name += f"_{exp_settings['emb_mem_limits'][0]}-{exp_settings['emb_mem_limits'][1]}m"
@@ -1037,7 +1069,7 @@ def run_experiment(exp_base, exp_difficulty):
             )
             print(
                 f"Memory Limits: {exp_settings['emb_mem_limits'][0]}-{exp_settings['emb_mem_limits'][1]} out of {exp_settings['pulls_per_episode']}")
-            print(f"Memory Mode: {exp_settings['mem_mode']} | Memory Key into Emb: {exp_settings['mem_store_key']}")
+            print(f"Memory Mode: {exp_settings['mem_mode']} | Memory Key into Emb: {exp_settings['mem_store_key']} | Emb Loss: {exp_settings['emb_loss']}")
         print(
             f"Val_CF: {round(exp_settings['value_error_coef'], 5)} | Ent_CF: {round(exp_settings['entropy_error_coef'], 5)}"
         )
@@ -1048,7 +1080,7 @@ def run_experiment(exp_base, exp_difficulty):
 
             # Save tensorboard returns, accuracy, and r-gates for last run of long tests
             exp_settings["tensorboard_logging"] = (
-                i == num_repeats - 1 and exp_settings["epochs"] >= 200
+                i == num_repeats - 1 and exp_length >= 200
             )
 
             # Save model for future noise evals of different types
@@ -1068,6 +1100,8 @@ def run_experiment(exp_base, exp_difficulty):
         if exp_length >= 200:
             if exp_settings["epochs"] < 25:
                 exp_name += f"_{exp_settings['noise_type']}_noise_eval"
+                if not exp_settings['emb_with_mem']:
+                    exp_name += "_no_mem"
 
             # Keys will be tensors, and will save keys from only the last run of a repeated run to capture training data
             torch.save(log_keys, "..\\Mem_Store_Project\\data\\" + exp_name + ".pt")    #win
@@ -1082,6 +1116,6 @@ def run_experiment(exp_base, exp_difficulty):
                 epoch_mapping=epoch_mapping,
                 epoch_info=epoch_info,
                 tot_emb_acc=tot_emb_acc,
-                tot_emb_loss=tot_emb_loss
+                tot_emb_loss=tot_emb_loss,
             )
     ### End of Experiment Data

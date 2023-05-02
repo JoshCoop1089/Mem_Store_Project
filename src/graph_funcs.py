@@ -2,6 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from datetime import datetime
 
 # Win64bit Optimizations for TSNE
 from sklearn.manifold import TSNE
@@ -155,6 +156,9 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
     frac = 0.05
     marker_list = ["dashdot", "solid", (0, (3, 1, 1)), (0,(2,1,2))]
     for idx_mem, mem_store in enumerate(mem_store_types):
+        if graph_type == "Embedder Loss" and 'embedding' not in mem_store:
+            continue
+        
         exp_name1 = "..\\Mem_Store_Project\\data\\" + exp_name + f"_{mem_store}"
         # if mem_store == 'embedding':
         #     exp_name1 += "_LSTM_full"
@@ -164,7 +168,7 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
             exp_name1 += f"_{mem_start}-{mem_stop}m"
         if noise_eval:
             exp_name1 += f"_{noise_type}_noise_eval"
-        exp_name1 += ".npz"
+        exp_name1 += "_no_mem.npz"
 
         exp_len = np.load(exp_name1, allow_pickle=True)["epoch_info"]
         exp_settings["epochs"] = exp_len[0]
@@ -192,6 +196,10 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
         # Embedder Loss
         elif graph_type == "Embedder Loss":
             data = np.load(exp_name1)["tot_emb_loss"][:exp_settings['epochs']]
+        elif graph_type == "Embedder Positive Loss":
+            data = np.load(exp_name1)["tot_cont_neg_loss"][:exp_settings['epochs']]
+        elif graph_type == "Embedder Negative Loss":
+            data = np.load(exp_name1)["tot_cont_pos_loss"][:exp_settings['epochs']]
 
         in_array = np.arange(len(data))
         lowess_data = lowess(data, in_array, frac=frac, return_sorted=False)
@@ -227,8 +235,6 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
                     )
         except:
             pass
-
-
 
     # Graph Labeling and Misc Stuff
     if exp_settings["hamming_threshold"]:
@@ -282,7 +288,9 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
 
     # Graph Saving
     if len(data) >= 200:
-        exp_title = file_loc + exp_name + f"_{noise_type}_{num_repeats}r_{graph_type}" + ".png"
+        cur_date = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
+        exp_title = file_loc + cur_date + "_" + exp_name + \
+            f"_{noise_type}_{num_repeats}r_{graph_type}" + ".png"
         f.savefig(exp_title)
 
 
@@ -482,7 +490,7 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
                 labels = [x[4] for x in memory]
             except Exception as e:
                 # print(e)
-                labels = [x[1] for x in memory]
+                labels = [x[2] for x in memory]
 
 
             # Artifically boost datapoint count to make tsne nicer
@@ -539,15 +547,17 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
     plt.show()
 
     # Graph Saving
+    cur_date = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
     exp_len = np.load(exp_name + ".npz", allow_pickle=True)["epoch_info"]
     if exp_len[0] >= 200:
         exp_title = (
-            file_loc + exp_name1 + f"_{mem_store_types}_train_tsne_{color_by}" + ".png"
+            file_loc + cur_date + "_" + exp_name1 + f"_{mem_store_types}_train_tsne_{color_by}" + ".png"
         )
         f.savefig(exp_title)
     if exp_len[1] >= 50:
         exp_title1 = (
-            file_loc + exp_name1 + f"_{mem_store_types}_noise_tsne_{color_by}" + ".png"
+            file_loc + cur_date + "_" + exp_name1 +
+            f"_{mem_store_types}_noise_tsne_{color_by}" + ".png"
         )
         f1.savefig(exp_title1)
 
@@ -643,13 +653,13 @@ if __name__ == "__main__":
     # stats = [2,4,8, 0.2]
     # stats = [6,12,24, 0.25]
     # stats = [10,20,40,0.25]
-    stats = [8,16,40, 0.2]
+    # stats = [8,16,40, 0.2]
 
     # stats = [5,10,10, 0.2]
     # stats = [5,10,10, 0.4]
     # stats = [5,10,20, 0]
     # stats = [5,10,20, 0.1]
-    # stats = [5,10,20, 0.2]
+    stats = [5,10,20, 0.2]
     # stats = [5,10,20, 0.4]
     # stats = [5,10,40, 0.2]
     # stats = [5,10,40, 0.4]
@@ -659,9 +669,10 @@ if __name__ == "__main__":
     # exp_types = ['embedding']
     # mem_limits = [(0,10), (1,9), (2,8), (3,7)]
     # exp_types = ['context', 'embedding_LSTM_hidden', 'embedding_LSTM_full', 'L2RL']
-    exp_types = ['context', 'embedding_LSTM_hidden', 'L2RL']
+    # exp_types = ['context', 'embedding_LSTM_hidden_groundtruth', 'L2RL']
+    exp_types = ['context', 'embedding_LSTM_hidden_kmeans', 'L2RL']
     # exp_types = ['embedding_LSTM_hidden']
-    # exp_types = ['embedding_LSTM_hidden', 'embedding_LSTM_hidden']
+    # exp_types = ['embedding_LSTM_hidden_groundtruth', 'embedding_LSTM_hidden']
     # exp_types = ['context', 'L2RL']
     mem_limits = (0,10)
 
@@ -679,10 +690,10 @@ if __name__ == "__main__":
     # noise_train_type = "none"
     noise_types = [
     # False,
-    # "random",
+    "random",
     # "left_mask",
     # "center_mask",
-    "right_mask",
+    # "right_mask",
     # "checkerboard",
     ]
 
@@ -705,8 +716,10 @@ if __name__ == "__main__":
             graph_with_lowess_smoothing(exp_base, exp_difficulty, "Returns")
             graph_with_lowess_smoothing(exp_base, exp_difficulty, "Accuracy")
             # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Loss")
-            # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
-            # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
+            # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Positive Loss")
+            # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Negative Loss")
+            # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
+            # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
             # for mem_type in exp_types:
             #     exp_base = mem_type, noise_type, figure_save_location, noise_eval

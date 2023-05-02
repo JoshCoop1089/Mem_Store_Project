@@ -31,7 +31,7 @@ class DNDLSTM(nn.Module):
         self.bias = bias
         self.device = device
         self.exp_settings = exp_settings
-        self.unsure_bc_guess = 0
+        self.unsure_bc_guess = torch.Tensor([0.0]).to(self.device)
         self.N_GATES = 4
 
         # input-hidden weights
@@ -41,7 +41,6 @@ class DNDLSTM(nn.Module):
             bias=bias,
             device=self.device,
         )
-        self.i2h_r_gates = self.i2h.weight[3*dim_hidden_lstm:4*dim_hidden_lstm].detach()
 
         # hidden-hidden weights
         self.h2h = nn.Linear(
@@ -50,8 +49,7 @@ class DNDLSTM(nn.Module):
             bias=bias,
             device=self.device,
         )
-        self.h2h_r_gates = self.h2h.weight[3*dim_hidden_lstm:4*dim_hidden_lstm].detach()
-
+        
         # dnd
         self.dnd = DND(dict_len, dim_hidden_lstm, exp_settings, self.device)
         # policy
@@ -140,7 +138,7 @@ class DNDLSTM(nn.Module):
                     if len(self.dnd.barcode_guesses) > 0:
                         barcode_sims = torch.nn.functional.cosine_similarity(obs_bar_reward, self.dnd.barcode_guesses)
                         barcode_id = torch.argmax(barcode_sims).view(1)
-                        self.unsure_bc_guess += float(max(barcode_sims))
+                        self.unsure_bc_guess += max(barcode_sims)
 
                 mem, predicted_barcode, sim_score = self.dnd.get_memory(
                     h, barcode_string, barcode_id, barcode_string_noised
@@ -151,6 +149,7 @@ class DNDLSTM(nn.Module):
                 for layer in layers:
                     for name, param in layer.named_parameters():
                         param.requires_grad = True
+
             else:  # mem_store == context or hidden
                 mem, predicted_barcode, sim_score = self.dnd.get_memory_non_embedder(
                     q_t
@@ -158,7 +157,8 @@ class DNDLSTM(nn.Module):
                 m_t = mem.tanh()
 
             # gate the memory; in general, can be any transformation of it
-            c_t = c_t + torch.mul(r_t, m_t)
+            if self.exp_settings['emb_with_mem'] or self.exp_settings['epochs'] > 0:
+                c_t = c_t + torch.mul(r_t, m_t)
 
         # get gated hidden state from the cell state
         h_t = torch.mul(o_t, c_t.tanh())
@@ -179,7 +179,7 @@ class DNDLSTM(nn.Module):
                 self.dnd.save_memory(h_t, c_t)
 
             else:
-                self.dnd.save_memory_non_embedder(q_t, barcode_string, c_t)
+                self.dnd.save_memory_non_embedder(q_t, barcode_string, barcode_string_noised, c_t)
 
         # policy
         pi_a_t, v_t, entropy = self.a2c.forward(h_t)

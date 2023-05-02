@@ -138,7 +138,6 @@ class DND:
         # mem_restriction_trial = self.trial_hidden_states[4:8]
 
         # Append new memories at head of list to allow sim search to find these first
-        # for embedding, real_bc, _, model_predicted_bc, mem_pred_bc in self.trial_hidden_states:
         for embedding, real_bc, _, model_predicted_bc, mem_pred_bc, barcode_string_noised in mem_restriction_trial:
             self.keys = [
                 [torch.squeeze(embedding.detach()), real_bc, model_predicted_bc, mem_pred_bc, barcode_string_noised]
@@ -150,14 +149,14 @@ class DND:
             self.vals.pop()
         return
 
-    def save_memory_non_embedder(self, memory_key, barcode_string, memory_val):
+    def save_memory_non_embedder(self, memory_key, barcode_string, barcode_string_noised, memory_val):
         try:
             test = self.keys[0][0]
         except IndexError:
             self.keys.pop(0)
 
         # Append new memories at head of list to allow sim search to find these first
-        self.keys = [[(torch.squeeze(memory_key.detach())), barcode_string]] + self.keys
+        self.keys = [[(torch.squeeze(memory_key.detach())), barcode_string, barcode_string_noised]] + self.keys
         self.vals = [torch.squeeze(memory_val.detach())] + self.vals
 
         # remove the oldest memory, if overflow
