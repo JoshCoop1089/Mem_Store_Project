@@ -326,11 +326,6 @@ class ContextualBandit:
             if len(barcode_bag) == 0:
                 seed_bc = barcode
 
-            # if self.sim_threshold:
-            #     similarity = np.dot(seed_bc, barcode) / (norm(seed_bc) * norm(barcode))
-            #     if similarity < self.sim_threshold:
-            #         continue
-
             # barcode -> string starts out at '[1 1 0]', thus the reductions on the end
             barcode_string = np.array2string(barcode)[1:-1].replace(" ", "")
             barcode_bag.add(barcode_string)

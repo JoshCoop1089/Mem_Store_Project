@@ -10,21 +10,7 @@ class Embedder(nn.Module):
         self.bias = bias
         self.exp_settings = exp_settings
         self.device = device
-
-        # What is being used as a key in memory?
-        # LSTM1 Hidden State (base version)
-        if exp_settings['mem_store_key'] == 'hidden':
-            self.input_dim = exp_settings["dim_hidden_lstm"]
-
-        # Ritter style barcode only
-        elif exp_settings['mem_store_key'] == 'context':
-            self.input_dim = int(
-                exp_settings['barcode_size']*(1+exp_settings['noise_train_percent']))
-
-        # The full input to LSTM1
-        elif exp_settings['mem_store_key'] == 'full':
-            self.input_dim = exp_settings['num_arms'] + int(exp_settings['barcode_size']*(1+exp_settings['noise_train_percent']))+1
-
+        self.input_dim = exp_settings["dim_hidden_lstm"]
         self.embedding_size = exp_settings["embedding_size"]
         self.num_barcodes = exp_settings["num_barcodes"]
         self.dropout_coef = exp_settings["dropout_coef"]

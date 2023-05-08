@@ -89,9 +89,6 @@ class DND:
             )
             self.criterion = nn.CrossEntropyLoss().to(self.device)
 
-            # Limit which pulls are stored in memory and used in loss calc
-            self.mem_start, self.mem_stop = exp_settings['emb_mem_limits']
-
         # allocate space for memories
         self.reset_memory()
         # check everything
@@ -124,21 +121,24 @@ class DND:
             self.save_memory(k, v)
 
     def save_memory(self, memory_key, memory_val):
-        # try:
-        #     test = self.keys[0][0]
-        # except IndexError:
-        #     self.keys.pop(0)
+
         # Save every embedding of the trial
         self.trial_buffer.pop(0)
         keys = self.trial_buffer
         # self.trial_hidden_states = [keys[-1]]
         # self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != () and i > len(keys)//4]
         self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != ()]
-        mem_restriction_trial = self.trial_hidden_states[self.mem_start:self.mem_stop]
-        # mem_restriction_trial = self.trial_hidden_states[4:8]
 
-        # Append new memories at head of list to allow sim search to find these first
-        for embedding, real_bc, _, model_predicted_bc, mem_pred_bc, barcode_string_noised in mem_restriction_trial:
+        """
+        Keys in Memory store the following:
+            Embedding from LSTM2
+            Real BarCcode w/o Noise
+            BC w/o Noise predicted by Embedder
+            BC w/o Noise predicted by Memory when this embedding was used as a search key
+            Real BC with Noise for use in T_SNE plotting (to be depreciated eventually)
+        """
+
+        for embedding, real_bc, _, model_predicted_bc, mem_pred_bc, barcode_string_noised in self.trial_hidden_states:
             self.keys = [
                 [torch.squeeze(embedding.detach()), real_bc, model_predicted_bc, mem_pred_bc, barcode_string_noised]
             ] + self.keys
@@ -155,7 +155,12 @@ class DND:
         except IndexError:
             self.keys.pop(0)
 
-        # Append new memories at head of list to allow sim search to find these first
+        """
+        Keys in Memory store the following:
+            Embedding from LSTM2
+            Context BC w/o Noise as String
+            BC with Noise for use in T_SNE plotting (to be depreciated eventually)
+        """
         self.keys = [[(torch.squeeze(memory_key.detach())), barcode_string, barcode_string_noised]] + self.keys
         self.vals = [torch.squeeze(memory_val.detach())] + self.vals
 
