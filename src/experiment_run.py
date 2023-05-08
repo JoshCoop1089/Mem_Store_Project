@@ -88,8 +88,8 @@ noise_percent = [4/20, 6/20, 8/20, 10/20, 12/20, 14/20]
 noise_types = [
     # False,
     # "right_mask",
-    "random_no_mem",
     "random",
+    "random_no_mem",
     # "left_mask",
     # "center_mask",
     # "checkerboard",

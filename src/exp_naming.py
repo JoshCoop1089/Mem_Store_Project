@@ -228,8 +228,7 @@ def run_experiment(exp_base, exp_difficulty):
                     exp_name += "_no_mem"
 
             # Keys will be tensors, and will save keys from only the last run of a repeated run to capture training data
-            torch.save(log_keys, "..\\Mem_Store_Project\\data\\" +
-                       exp_name + ".pt")  # win
+            torch.save(log_keys, "..\\Mem_Store_Project\\data\\" + exp_name + ".pt")  # win
             # torch.save(log_keys, "..//Mem_Store_Project//data//" + exp_name + ".pt")  #ilab
 
             # Logs will be numpy arrays of returns, accuracy, BC->Arm maps (for the last run of a repetition), and epoch_info

@@ -52,19 +52,6 @@ def plot_tsne_distribution(
     for loc_id, c_id in enumerate(mapping.keys()):
         cluster_id[c_id] = loc_id//(len(mapping.keys())//2)
 
-    # # Find avg hamming distance given cluster id
-    # ham_avg = [0]*(2)
-    # clusters = [[],[]]
-    # for bc, c_id in cluster_id.items():
-    #     clusters[c_id].append(bc)
-    # for c_id, cluster in enumerate(clusters):
-    #     for bc in cluster:
-    #         for bc1 in cluster:
-    #             ham_avg[c_id] += hamming_distance(bc, bc1)
-    
-    # # ham_avg [x/len(mapping.keys())/2)**2 for x in ham_avg]
-    # print(ham_avg)
-
     # Seperate by barcode
     classes = {k: [] for k in mapping.keys()}
     for idx, c_id in enumerate(labels):
@@ -165,8 +152,11 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
 
         if noise_eval:
             exp_name1 += f"_{noise_type}_noise_eval"
-        exp_name1 += "_no_mem.npz"
-
+            try:
+                exp_name1 += "_no_mem"
+            except Exception as e:
+                pass
+        exp_name1 += ".npz"
         exp_len = np.load(exp_name1, allow_pickle=True)["epoch_info"]
         exp_settings["epochs"] = exp_len[0]
         exp_settings["noise_eval_epochs"] = exp_len[1]
@@ -326,6 +316,7 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
     ].reshape((1, 1))
     epoch_mapping = epoch_mapping[0][0]
     train_epochs = data["epoch_info"][0]
+
     # There will be many key chunks stored in torch.load(key_file)
     if train_epochs != 0:
         # Initial, 33%, 66%, 100% Training View
@@ -373,7 +364,7 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
             labels = [x[4] for x in memory]
         except Exception as e:
             # print(e)
-            labels = [x[1] for x in memory]
+            labels = [x[2] for x in memory]
         # Artifically boost datapoint count to make tsne nicer
         while len(embeddings) < 100:
             embeddings.extend(embeddings)
@@ -510,8 +501,8 @@ if __name__ == "__main__":
     # stats = [5,10,40, 0.2]
     # stats = [5,10,40, 0.4]
 
-    noise_eval = True
-    # noise_eval = False
+    # noise_eval = True
+    noise_eval = False
     # exp_types = ['embedding']
     # exp_types = ['context', 'embedding_LSTM_hidden', 'embedding_LSTM_full', 'L2RL']
     # exp_types = ['context', 'embedding_LSTM_hidden_groundtruth', 'L2RL']
@@ -559,9 +550,9 @@ if __name__ == "__main__":
             # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
             # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
-            # for mem_type in exp_types:
-            #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
-            #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
+            for mem_type in exp_types:
+                exp_base = mem_type, noise_type, figure_save_location, noise_eval
+                graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
 
             # exp_base = exp_types, noise_type, figure_save_location
             # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')
