@@ -19,6 +19,15 @@ from sl_model.utils import (
 from task.ContextBandits import ContextualBandit
 from sklearn.cluster import KMeans
 
+def barcodes_are_different(barcode_strings):
+    percent_diff = 0.0
+    x = barcode_strings
+    diff = [int(x[i][0]==x[i-1][0]) for i, _ in enumerate(x)]
+    percent_diff = sum(diff)/len(barcode_strings)
+    print(percent_diff)
+    return
+def calc_contrastive_loss(input_stuff):
+    return episode_loss
 
 def run_experiment_sl(exp_settings):
     """
@@ -125,7 +134,7 @@ def run_experiment_sl(exp_settings):
     )
 
     # Freeze a portion of the layers to simulate keeping the R-Gates open for the first portion of training
-    if exp_settings['epochs'] > 0:
+    if exp_settings['freeze_r_gates'] > 0 and exp_settings['epochs'] > 0:
         r_gate_indicies = [x for x in range(3*dim_hidden_lstm,4*dim_hidden_lstm)]
         i2h_weight_hook, i2h_bias_hook = freeze_linear_params(agent.i2h, r_gate_indicies)
         h2h_weight_hook, h2h_bias_hook = freeze_linear_params(agent.h2h, r_gate_indicies)
@@ -172,13 +181,16 @@ def run_experiment_sl(exp_settings):
     log_bc_guess_accuracy = np.zeros(
         n_epochs,
     )
-    epoch_sim_log = np.zeros(
-        episodes_per_epoch * pulls_per_episode,
+    log_r_gate_sum = np.zeros(
+        n_epochs,
     )
 
     # Save keys during training at 0%, 33%, 66% and 100% of total train time
+    early_keys = [int(x * exp_settings['epochs'] // 20) for x in range(1,6)]
     train_epochs = [int(x * exp_settings["epochs"] // 3) for x in range(3)]
     train_epochs.extend([exp_settings["epochs"] - 1])
+    train_epochs.extend(early_keys)
+    train_epochs.sort()
 
     # Save keys at end of different noise epochs
     noise_epochs = [
@@ -211,6 +223,9 @@ def run_experiment_sl(exp_settings):
                 arm_id,
             ) = task.sample()
             agent.dnd.mapping = epoch_mapping
+
+            # # How many times is a barcode the same between episodes
+            # barcodes_are_different(barcode_strings)
 
             # flush hippocampus
             agent.reset_memory()
@@ -430,13 +445,15 @@ def run_experiment_sl(exp_settings):
                         (one_hot_action, next_bc, r_t.view(1, 1)), dim=1
                     )
 
+                    log_r_gate_sum[i] += torch.div(torch.sum(r_gate), exp_settings['dim_hidden_lstm']*episodes_per_epoch*pulls_per_episode)
+
                     # Look at R-Gate values in the final training epoch
                     if (
                         exp_settings["tensorboard_logging"]
                         and i == exp_settings["epochs"] - 1
                     ):
                         tb.add_histogram(
-                            "R-Gate Weights Train Final Epoch",
+                            "R-Gate Sigmoided Train Final Epoch",
                             r_gate,
                             t + m * pulls_per_episode,
                         )
@@ -459,39 +476,41 @@ def run_experiment_sl(exp_settings):
                         a_dnd = agent.dnd
                         
                         # Need to do a math sweep over this code implementation.  Also prob should reduce loss by a constant factor
-                        if exp_settings['emb_loss'] == 'contrastive':
-                            """
-                            embA are from current episode
-                            create all pairs from embA, label as similar
-                            if not first episode:
-                                retrieve embeddings from last episode (embB)
-                                create all pairs from embA and embB, label as different
-                            """
-                            embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
-                            embA_stack = torch.stack(embA)
-                            x = vectorize_cos_sim(embA_stack, embA_stack, device)
+                        # if exp_settings['emb_loss'] == 'contrastive':
+                        """
+                        embA are from current episode
+                        create all pairs from embA, label as similar
+                        if not first episode:
+                            retrieve embeddings from last episode (embB)
+                            create all pairs from embA and embB, label as different
+                        """
+                        embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
+                        embA_stack = torch.stack(embA)
+                        x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
 
-                            # Avoid doublecounting positive pairs
-                            x_dist = (torch.ones_like(x, device = device) - x)/2
+                        # Avoid doublecounting positive pairs
+                        x_dist = (torch.ones_like(x, device = device) - x)/2
 
-                            pos_output = torch.sum(x_dist)
-                            neg_output = torch.tensor(0, device = device)
-                            if m > 0:
-                                negs = vectorize_cos_sim(
-                                    embA_stack, embB_stack, device)
-                                
-                                # Far apart negatives should not contribute to loss bc cos will be closer to 0
-                                # neg_dist = torch.ones_like(negs, device = device)-negs
+                        pos_output = torch.sum(x_dist)
+                        neg_output = torch.tensor(0, device = device)
+                        if m > 0:
+                            negs = vectorize_cos_sim(
+                                embA_stack, embB_stack, device, same = False)
+                            
+                            # Far apart negatives should not contribute to loss bc cos will be closer to 0
+                            neg_dist = torch.ones_like(negs, device = device)-negs  
 
-                                neg_output = torch.sum(negs)
-                            embB_stack = embA_stack
-                            episode_loss = (pos_output+neg_output).detach().clone().requires_grad_(True)
+                            # print(neg_dist)
+                            neg_output = torch.sum(neg_dist)
+                        embB_stack = embA_stack.detach().clone()
+                        episode_loss = torch.div((pos_output+neg_output), 2).detach().clone().requires_grad_(True)
+                        a_dnd.contrastive_loss[i] += torch.div(episode_loss, episodes_per_epoch)
 
-                        elif exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'groundtruth':
+                        if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'groundtruth':
                             loss_vals = [x[2] for x in a_dnd.trial_buffer]
                             episode_loss = torch.stack(loss_vals).sum()
                             
-                        a_dnd.embedder_loss[i] += episode_loss/episodes_per_epoch
+                        a_dnd.embedder_loss[i] += torch.div(episode_loss, episodes_per_epoch)
 
                         # Unfreeze Embedder
                         for name, param in a_dnd.embedder.named_parameters():
@@ -536,6 +555,7 @@ def run_experiment_sl(exp_settings):
                     cumulative_reward, (episodes_per_epoch * pulls_per_episode)
                 )
 
+
                 # Updating avg accuracy per episode
                 log_bc_guess_accuracy[i] += torch.div(agent.unsure_bc_guess, (episodes_per_epoch*pulls_per_episode))
                 log_embedder_accuracy[i] += torch.div(agent.dnd.pred_accuracy, (episodes_per_epoch*pulls_per_episode))
@@ -558,9 +578,9 @@ def run_experiment_sl(exp_settings):
                 tb.add_scalar("Emb Retrieval Accuracy", log_embedder_accuracy[i], i)
                 tb.add_scalar("Emb Loss", agent.dnd.embedder_loss[i], i)
                 if i < exp_settings["epochs"]:
-                    tb.add_histogram("R-Gate Weights Train Epochs", r_gate, i)
+                    tb.add_histogram("R-Gate Sigmoided Train Epochs", r_gate, i)
                 else:
-                    tb.add_histogram("R-Gate Weights Noise Epochs", r_gate, i)
+                    tb.add_histogram("R-Gate Sigmoided Noise Epochs", r_gate, i)
 
             run_time[i] = time.perf_counter() - time_start
 
@@ -655,8 +675,8 @@ def run_experiment_sl(exp_settings):
     )
     print("- - - " * 3)
 
-    logs_for_graphs = log_return, log_memory_accuracy, epoch_sim_log, log_embedder_accuracy
-    loss_logs = log_loss_value, log_loss_policy, log_loss_total, agent.dnd.embedder_loss
+    logs_for_graphs = log_return, log_memory_accuracy, log_r_gate_sum, log_embedder_accuracy
+    loss_logs = log_loss_value, log_loss_policy, log_loss_total, agent.dnd.embedder_loss, agent.dnd.contrastive_loss
     key_data = log_keys, epoch_mapping
 
     if exp_settings["tensorboard_logging"]:

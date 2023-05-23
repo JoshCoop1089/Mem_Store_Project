@@ -75,6 +75,12 @@ class DND:
                 + exp_settings["noise_eval_epochs"] * len(exp_settings["noise_percent"])
             )
         )
+        self.contrastive_loss = np.zeros(
+            (
+                exp_settings["epochs"]
+                + exp_settings["noise_eval_epochs"] * len(exp_settings["noise_percent"])
+            )
+        )
 
         # allocate space for per trial hidden state buffer
         self.trial_buffer = [()]

@@ -9,6 +9,8 @@ from sklearn.manifold import TSNE
 from sklearnex import patch_sklearn
 patch_sklearn()
 
+from sklearn.decomposition import PCA
+
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
 # ignore all future warnings from sklearn tsne
@@ -37,11 +39,35 @@ def scale_to_01_range(x):
 def hamming_distance(barcode1, barcode2):
     return sum(c1 != c2 for c1, c2 in zip(barcode1, barcode2))
 
+def pca_n_component_finder(data_std):
+    pca = PCA(n_components=None)
+    pca.fit(data_std)
+
+    exp_var = pca.explained_variance_ratio_ * 100
+    cum_exp_var = np.cumsum(exp_var)
+
+    plt.bar(range(1, data_std.shape[1]+1), exp_var, align='center',
+            label='Individual explained variance')
+
+    plt.step(range(1, data_std.shape[1]+1), cum_exp_var, where='mid',
+            label='Cumulative explained variance', color='red')
+
+    plt.ylabel('Explained variance percentage')
+    plt.xlabel('Principal component index')
+    plt.xticks(ticks=[x for x in range(data_std.shape[1]+1)])
+    plt.legend(loc='best')
+    plt.tight_layout()
+    plt.show()
 
 def plot_tsne_distribution(
-    keys, labels, mapping, fig, axes, idx_mem, color_by="cluster"
+    keys, labels, mapping, fig, axes, id_mem_x, id_mem_y, color_by="cluster"
 ):
     features = np.array([y.cpu().numpy() for y in keys])
+
+    if len(features[1]) > 30:
+        # pca_n_component_finder(features)
+        features = PCA(n_components=30).fit_transform(features)
+
     tsne = TSNE(n_components=2).fit_transform(features)
     tx = tsne[:, 0]
     ty = tsne[:, 1]
@@ -111,7 +137,7 @@ def plot_tsne_distribution(
             color_id = cluster_id[c_id]
 
         # Graph arms by color and barcodes by marker
-        axes[idx_mem].scatter(
+        axes[id_mem_x][id_mem_y].scatter(
             current_tx, current_ty, c=colors[color_id], marker=marker_list[m_id]
         )
 
@@ -138,10 +164,10 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
     
 
     # LOWESS Smoothed Graphs
-    frac = 0.05
+    frac = 0.1
     marker_list = ["dashdot", "solid", (0, (3, 1, 1)), (0,(2,1,2))]
     for idx_mem, mem_store in enumerate(mem_store_types):
-        if graph_type == "Embedder Loss" and 'embedding' not in mem_store:
+        if graph_type in ["Embedder Loss", 'Contrastive Loss'] and 'embedding' not in mem_store:
             continue
         
         exp_name1 = "..\\Mem_Store_Project\\data\\" + exp_name + f"_{mem_store}"
@@ -152,10 +178,10 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
 
         if noise_eval:
             exp_name1 += f"_{noise_type}_noise_eval"
-            try:
-                exp_name1 += "_no_mem"
-            except Exception as e:
-                pass
+            # try:
+            #     exp_name1 += "_no_mem"
+            # except Exception as e:
+            #     pass
         exp_name1 += ".npz"
         exp_len = np.load(exp_name1, allow_pickle=True)["epoch_info"]
         exp_settings["epochs"] = exp_len[0]
@@ -180,13 +206,18 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
             axes.set_ylim([0, 1])
             data = np.load(exp_name1)["tot_acc"]
 
+        # R-Gate Avg Activations
+        elif graph_type == "R-Gates":
+            axes.set_ylim([0, 1])
+            data = np.load(exp_name1)["r_gate_sum"]
+
         # Embedder Loss
         elif graph_type == "Embedder Loss":
             data = np.load(exp_name1)["tot_emb_loss"][:exp_settings['epochs']]
-        elif graph_type == "Embedder Positive Loss":
-            data = np.load(exp_name1)["tot_cont_neg_loss"][:exp_settings['epochs']]
-        elif graph_type == "Embedder Negative Loss":
-            data = np.load(exp_name1)["tot_cont_pos_loss"][:exp_settings['epochs']]
+
+        # Embedder Loss
+        elif graph_type == "Contrastive Loss" and 'embedding' in mem_store:
+            data = np.load(exp_name1)["tot_cont_loss"][:exp_settings['epochs']]
 
         in_array = np.arange(len(data))
         lowess_data = lowess(data, in_array, frac=frac, return_sorted=False)
@@ -229,23 +260,11 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
             + f" | InterCluster Dist: {exp_settings['barcode_size']-max(2*exp_settings['hamming_threshold'], exp_settings['num_arms']-1)}"
         )
 
-
     graph_title = f""" --- {graph_type} averaged over {num_repeats} runs ---
     Arms: {exp_settings['num_arms']} | Unique Barcodes: {exp_settings['num_barcodes']} | Barcode Dim: {exp_settings['barcode_size']}
     LOWESS: {min(frac, use_lowess)} | {cluster_info}
     Noise Applied: {noise_type} | Noise Trained: {int(exp_settings["noise_train_percent"]*exp_settings['barcode_size'])} bits
     """
-
-    # Noise Partitions
-    prop_cycle = plt.rcParams["axes.prop_cycle"]
-    colors = prop_cycle.by_key()["color"]
-    for idx, noise_percent in enumerate(exp_settings["noise_percent"]):
-        axes.axvline(
-            x=exp_settings["epochs"] + idx * exp_settings["noise_eval_epochs"],
-            color=colors[idx],
-            linestyle="dashed",
-            label=f"{int(exp_settings['barcode_size']*noise_percent)} Bits Noisy",
-        )
 
     # # Random Mem Choice Info
     # if graph_type == 'Accuracy':
@@ -255,6 +274,16 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
     #     axes.axhline(y=1/exp_settings['num_arms'], color='g',
     #                 linestyle='dashed', label='Random Arm')
 
+    # Noise Partitions
+    prop_cycle = plt.rcParams["axes.prop_cycle"]
+    colors = prop_cycle.by_key()["color"]
+    for idx, noise_percent in enumerate(exp_settings["noise_percent"]):
+        axes.axvline(
+            x=exp_settings["epochs"] + idx * exp_settings["noise_eval_epochs"],
+            color=colors[idx],
+            linestyle="dashed",
+            label=f"{int(exp_settings['barcode_size']*noise_percent)} Bits Noisy" if exp_settings['epochs'] != 0 else None,
+        )
     sns.despine()
     axes.set_xlabel("Epoch")
     axes.set_ylabel(f"{graph_type}")
@@ -265,6 +294,15 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
         borderaxespad=0,
         ncol=3,
     )
+
+    # Noise Eval X-Labels
+    if exp_settings['epochs'] == 0:
+        x_locs = [int((x+0.5)*exp_settings['noise_eval_epochs']) for x,_ in enumerate(exp_settings['noise_percent'])]
+        noise_labels = [f"{int(exp_settings['barcode_size']*noise_percent)} Bits Noisy" for noise_percent in exp_settings['noise_percent']]
+        axes.set_xticks(x_locs)
+        axes.set_xticklabels(noise_labels)
+        axes.set_xlabel(f"Ran {exp_settings['noise_eval_epochs']} epochs per Noise Level")
+
     f.tight_layout()
     f.subplots_adjust(top=0.8)
     f.suptitle(graph_title)
@@ -275,7 +313,7 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
     if len(data) >= 200:
         cur_date = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
         exp_title = file_loc + cur_date + "_" + exp_name + \
-            f"_{noise_type}_{num_repeats}r_{graph_type}" + ".png"
+            f"_{noise_type}_{num_repeats}r_{graph_type}" + "_no_mem.png"
         f.savefig(exp_title)
 
 
@@ -320,9 +358,15 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
     # There will be many key chunks stored in torch.load(key_file)
     if train_epochs != 0:
         # Initial, 33%, 66%, 100% Training View
-        train = [0, 33, 66, 100]
-        f, axes = plt.subplots(1, 4, figsize=(20, 6))
-        for idx_mem, memory in enumerate(all_keys[0:4]):
+        train = [0, 5, 10, 15, 20, 25, 33, 66, 100]
+
+        f, axes = plt.subplots(3, 3, figsize=(12, 12))
+        for idx_mem, memory in enumerate(all_keys[0:len(train)]):
+
+            # Subplot Locations for 9 key splits
+            id_mem_x = idx_mem//3
+            id_mem_y = idx_mem%3
+
             # T-SNE to visualize keys in memory
             embeddings = [x[0] for x in memory]
             try:
@@ -338,14 +382,14 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
                 labels.extend(labels)
 
             f, axes = plot_tsne_distribution(
-                embeddings, labels, epoch_mapping, f, axes, idx_mem, color_by
+                embeddings, labels, epoch_mapping, f, axes, id_mem_x, id_mem_y, color_by
             )
-            axes[idx_mem].xaxis.set_visible(False)
-            axes[idx_mem].yaxis.set_visible(False)
-            axes[idx_mem].set_title(f"{train[idx_mem]}%")
+            axes[id_mem_x][id_mem_y].xaxis.set_visible(False)
+            axes[id_mem_x][id_mem_y].yaxis.set_visible(False)
+            axes[id_mem_x][id_mem_y].set_title(f"Epoch: {int(train_epochs * train[idx_mem]/100)}")
 
-        num_noise_evals = max(len(all_keys[4:]), 2)
-        key_start = 4
+        num_noise_evals = max(len(all_keys[len(train):]), 2)
+        key_start = len(train)
 
         f.suptitle(exp_name1 + f"_{title}: Colored by {color_by}")
         f.tight_layout()
@@ -354,7 +398,7 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
         key_start = 0
 
     # Keys for the end of every noise eval epoch
-    f1, axes1 = plt.subplots(1, num_noise_evals, figsize=(5 * num_noise_evals, 6))
+    f1, axes1 = plt.subplots(2, num_noise_evals, figsize=(5 * num_noise_evals, 12))
     exp_noise = data["epoch_info"][2]
 
     for idx_mem, memory in enumerate(all_keys[key_start:]):
@@ -371,17 +415,16 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
             labels.extend(labels)
 
         f1, axes1 = plot_tsne_distribution(
-            embeddings, labels, epoch_mapping, f1, axes1, idx_mem, color_by
+            embeddings, labels, epoch_mapping, f1, axes1, 0, idx_mem, color_by
         )
-        axes1[idx_mem].xaxis.set_visible(False)
-        axes1[idx_mem].yaxis.set_visible(False)
-        axes1[idx_mem].set_title(
+        axes1[0][idx_mem].xaxis.set_visible(False)
+        axes1[0][idx_mem].yaxis.set_visible(False)
+        axes1[0][idx_mem].set_title(
             f"{int(exp_settings['barcode_size']*exp_noise[idx_mem])} Bits Noisy"
             # f"{int(exp_settings['barcode_size']*exp_settings['noise_train_percent']*exp_noise[idx_mem])} Bits Noisy"
         )
 
     f1.suptitle(exp_name1 + f"_{title}: Colored by {color_by}")
-
     f1.tight_layout()
     plt.show()
 
@@ -436,14 +479,14 @@ def graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by):
         keys = all_keys[3]
 
         # T-SNE to visualize keys in memory
-        e = [x[0] for x in keys]
-        l = [x[1] for x in keys]
-        embeddings = [
-            e[x] for x in range(len(e)) if x % 5 != 0 and x % 6 != 0 and x % 7 != 0
-        ]
-        labels = [
-            l[x] for x in range(len(l)) if x % 5 != 0 and x % 6 != 0 and x % 7 != 0
-        ]
+        embeddings = [x[0] for x in keys]
+        labels = [x[4] for x in keys]
+        # embeddings = [
+        #     e[x] for x in range(len(e)) if x % 5 != 0 and x % 6 != 0 and x % 7 != 0
+        # ]
+        # labels = [
+        #     l[x] for x in range(len(l)) if x % 5 != 0 and x % 6 != 0 and x % 7 != 0
+        # ]
 
         # Artifically boost datapoint count to make tsne nicer
         while len(embeddings) < 100:
@@ -485,18 +528,19 @@ if __name__ == "__main__":
     # exp_types = ['context', 'L2RL']
 
     # Experiment Difficulty
+    # stats = [2,4,8, 0.2]
+    # stats = [5,10,20, 0.2]
+    # stats = [8,16,40, 0.2]
+    stats = [10,10,20, 0.2]
+
     # stats = [4,8,24, 0.25]
     # stats = [4,8,40]
-    # stats = [2,4,8, 0.2]
     # stats = [6,12,24, 0.25]
     # stats = [10,20,40,0.25]
-    # stats = [8,16,40, 0.2]
-
     # stats = [5,10,10, 0.2]
     # stats = [5,10,10, 0.4]
     # stats = [5,10,20, 0]
     # stats = [5,10,20, 0.1]
-    stats = [5,10,20, 0.2]
     # stats = [5,10,20, 0.4]
     # stats = [5,10,40, 0.2]
     # stats = [5,10,40, 0.4]
@@ -504,11 +548,12 @@ if __name__ == "__main__":
     # noise_eval = True
     noise_eval = False
     # exp_types = ['embedding']
-    # exp_types = ['context', 'embedding_LSTM_hidden', 'embedding_LSTM_full', 'L2RL']
-    # exp_types = ['context', 'embedding_LSTM_hidden_groundtruth', 'L2RL']
-    exp_types = ['context', 'embedding_LSTM_hidden_kmeans', 'L2RL']
-    # exp_types = ['embedding_LSTM_hidden']
-    # exp_types = ['embedding_LSTM_hidden_groundtruth', 'embedding_LSTM_hidden']
+    # exp_types = ['context', 'embedding_LSTM_groundtruth', 'L2RL']
+    exp_types = ['context', 'embedding_LSTM_kmeans', 'L2RL']
+    # exp_types = ['context', 'embedding_LSTM_contrastive', 'L2RL']
+    # exp_types = ['embedding_LSTM_contrastive']
+    # exp_types = ['embedding_LSTM_kmeans']
+    # exp_types = ['embedding_LSTM_groundtruth']
     # exp_types = ['context', 'L2RL']
 
     num_arms = stats[0]
@@ -541,21 +586,22 @@ if __name__ == "__main__":
             barcode_size,
             noise_train_percent,
         )
-        if len(exp_types) != 1:
-            graph_with_lowess_smoothing(exp_base, exp_difficulty, "Returns")
-            graph_with_lowess_smoothing(exp_base, exp_difficulty, "Accuracy")
-            # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Loss")
-            # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Positive Loss")
-            # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Negative Loss")
-            # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
-            # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
-            # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
-            for mem_type in exp_types:
-                exp_base = mem_type, noise_type, figure_save_location, noise_eval
-                graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Returns")
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Accuracy")
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Loss")
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Loss")
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "R-Gates")
 
-            # exp_base = exp_types, noise_type, figure_save_location
-            # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')
-            # for mem_type in exp_types:
-            #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
-            #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'cluster')
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
+
+        # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
+        # for mem_type in exp_types:
+        #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
+        #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
+
+        # exp_base = exp_types, noise_type, figure_save_location
+        # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')
+        # for mem_type in exp_types:
+        #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
+        #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'cluster')

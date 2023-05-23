@@ -126,8 +126,8 @@ def get_hyperparameters(exp_settings):
                 exp_settings['dropout_coef'] = 0.363
                 if exp_settings['mem_mode'] == 'LSTM':
                     # Hidden LSTM1 passed into LSTM2
-                    exp_settings['embedding_size'] = int(2**6.8256)
-                    exp_settings['embedder_learning_rate'] = 10**-3.03456
+                    exp_settings['embedding_size'] = int(2**6.74534)
+                    exp_settings['embedder_learning_rate'] = 10**-3.3834
 
                     if exp_settings['emb_loss'] == 'kmeans':
                         exp_settings['embedding_size'] = int(2**7.93)
@@ -182,8 +182,8 @@ def get_hyperparameters(exp_settings):
         exp_settings['lstm_learning_rate'] = 10**-3.0788
         exp_settings['value_error_coef'] = 0.9407
         exp_settings["entropy_error_coef"] = 0.006
-        exp_settings['embedding_size'] = int(2**7.51)
-        exp_settings['embedder_learning_rate'] = 10**-3.89
+        exp_settings['embedding_size'] = int(2**8)
+        exp_settings['embedder_learning_rate'] = 10**-3.4
         exp_settings['dropout_coef'] = 0
     
     return exp_settings

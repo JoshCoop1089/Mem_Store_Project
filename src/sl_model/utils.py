@@ -122,17 +122,36 @@ def compute_a2c_loss(probs, values, returns, entropy):
     entropies = torch.stack(entropy).sum()
     return loss_policy, loss_value, entropies
 
-def vectorize_cos_sim(input1, input2, device):
-    dot = input1@input2.t()
-    norm1 = torch.norm(input1,2,1).to(device)
-    norm2 = torch.norm(input2,2,1).to(device)
-    s = torch.ones_like(dot, device = device)
+def vectorize_cos_sim(input1, input2, device, same=False):
+    """Take two batches of vectors and find the dot product between normalized versions of each pair of vectors
 
+    Args:
+        input1 (torch.tensor): First group of vectors (1xMxN)
+        input2 (torch.tensor): Second group of vectors(1xMxN)
+        device (torch.device): where to store the tensors
+        same (bool, optional): Are you passing in the same group of vectors. Defaults to False.
+
+    Returns:
+        _type_: _description_
+    """
+
+    norm1 = torch.linalg.norm(input1, dim=1, ord=2).to(
+        device).reshape(input1.shape[0], 1)
+    norm2 = norm1.clone()
+    input1_normed = input1/norm1
+    dot = input1_normed@input1_normed.t()
+    if not same:
+        norm2 = torch.linalg.norm(input2, dim=1, ord=2).to(
+            device).reshape(input2.shape[0], 1)
+        input2_normed = input2/norm2
+        dot = input1_normed@input2_normed.t()
+
+    s = torch.ones_like(dot, device=device)
     for i in range(input1.size()[0]):
         for j in range(input1.size()[0]):
             s[i][j] = norm1[i].item()*norm2[j].item()
-    x = torch.div(dot,s)
-    return x
+    x = torch.div(dot, s)
+    return dot
 
 """https://github.com/galidor/PyTorchPartialLayerFreezing/blob/main/partial_freezing.py
 

@@ -33,25 +33,26 @@ def avg_returns(
     exp_settings["mem_store"] = "embedding"
     exp_settings['mem_mode'] = "LSTM"
     # exp_settings['mem_mode'] = "one_layer"
-    # exp_settings['mem_store_key'] = 'hidden'
-    exp_settings['mem_store_key'] = 'context'
-    # exp_settings['mem_store_key'] = 'full'
+
+    exp_settings['emb_loss'] = 'contrastive'
+    # exp_settings['emb_loss'] = 'kmeans'
+
+    exp_settings['freeze_r_gates'] = 0
+    exp_settings['emb_with_mem'] = True
 
     # Task Complexity
     exp_settings["num_arms"] = 5
     exp_settings["num_barcodes"] = 10
     exp_settings["barcode_size"] = 20
-    exp_settings["epochs"] = 800
-    exp_settings["noise_eval_epochs"] = 50
-    exp_settings["emb_mem_limits"] = (0,10)
+    exp_settings["epochs"] = 600
+    exp_settings["noise_eval_epochs"] = 30
     exp_settings['dropout_coef'] = 0
 
     # Noise Complexity
     exp_settings["hamming_threshold"] = 1
     exp_settings["pulls_per_episode"] = 10
     exp_settings["noise_percent"] = [0.2]
-    exp_settings["sim_threshold"] = 0
-    exp_settings["noise_type"] = "right_mask"
+    exp_settings["noise_type"] = "random"
     exp_settings["noise_train_percent"] = 0.2
     exp_settings['noise_train_type'] = 'right_mask'
     exp_settings['perfect_noise'] = False
@@ -189,7 +190,7 @@ def avg_returns(
     # Current function being used as maximization target is just avg of total epoch returns
     logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
     log_return, log_memory_accuracy, epoch_sim_logs, log_embedder_accuracy = logs_for_graphs
-    log_loss_value, log_loss_policy, log_loss_total, embedder_loss = loss_logs
+    log_loss_value, log_loss_policy, log_loss_total, embedder_loss, contrastive_loss = loss_logs
     log_keys, epoch_mapping = key_data
 
     # Focusing only on noiseless eval to maximize training
@@ -240,47 +241,6 @@ optimizer = BayesianOptimization(
 # log_name = './logs_5a10b20s1h_600_epochs_noisy_init_10_right.json'
 # log_name = './logs_5a10b20s1h_800_epochs_embedder_lstm_noisy_init_10_right.json'
 log_name = './logs_5a10b20s1h_800_epochs_embedder_no_special_lstm_noisy_init_20_right.json'
-# log_name = './logs_5a10b20s1h_800_epochs_embedder_lstm_noisy_init_20_right.json'
-# log_name = './logs_5a10b20s1h_1000_epochs_noisy_init_40_right.json'
-# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_40_right.json'
-# log_name = './logs_5a10b10s1h_500_epochs_noisy_init_20_right.json'
-# log_name = './logs_5a10b10s1h_500_epochs_embedder_noisy_init_20_right.json'
-# log_name = './logs_5a10b10s1h_800_epochs_noisy_init_40_right.json'
-# log_name = './logs_5a10b10s1h_800_epochs_embedder_lstm_noisy_init_40_right.json'
-# log_name = './logs_5a10b40s1h_1000_epochs_noisy_init_20_right.json'
-# log_name = './logs_5a10b40s1h_1200_epochs_noisy_init_40_right.json'
-# log_name = './logs_5a10b40s1h_1000_epochs_embedder_noisy_init_20_right.json'
-# log_name = './logs_5a10b40s1h_1200_epochs_embedder_lstm_noisy_init_40_right.json'
-# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right.json'
-# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right_2.json'
-# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right_3.json'
-# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right_mem_recall_trunc_loss.json'
-# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right_double_layer_emb.json'
-# log_name = './logs_5a10b20s1h_1000_epochs_embedder_noisy_init_20_right_double_layer_emb 19mem variable dropout.json'
-# log_name = './logs_10a20n40s1h_2000_epochs_noisy_init_25_right.json'
-# log_name = './logs_10a20n40s1h_3000_epochs_embedder_noisy_init_25_right.json'
-# log_name = './logs_6a12b24s1h_1250_epochs_embedder_noisy_init_25_right.json'
-# log_name = './logs_6a12b40s1h_2000_epochs_noisy_init_25_right.json'
-# log_name = './logs_6a12b40s1h_1500_epochs_embedder_noisy_init_25_right.json'
-# log_name = './logs_6a12b40s1h_1500_epochs_noisy_init_50_right.json'
-# log_name = './logs_6a12b40s1h_1500_epochs_embedder_noisy_init_50_right.json'
-# log_name = './logs_4a8b40s1h_750_epochs_noisy_init_25_right.json'
-# log_name = './logs_4a8b40s1h_750_epochs_embedder_noisy_init_25_right.json'
-# log_name = './logs_4a8b40s1h_1000_epochs_noisy_init_50_right.json'
-# log_name = './logs_4a8b40s1h_1000_epochs_embedder_noisy_init_50_right.json'
-# log_name = './logs_4a8b24s1h_500_epochs_noisy_init_25_right.json'
-# log_name = './logs_4a8b24s1h_500_epochs_embedder_noisy_init_25_right.json'
-# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_l2rl_noisy_bc_init.json"
-# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_1500_epochs_embedder_noisy_bc_50_init.json"
-# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_1500_epochs_embedder1_noisy_bc_50_init.json"
-# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_embedder_entropy_annealed_loss_summed.json"
-# log_name = "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_300_epochs_entropy_annealed_loss_summed.json"
-# log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_300_epochs.json"
-# log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_2a4n24s1h_600_epochs_arm.json"
-# log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_L2RL.json"
-# log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs_emb.json"
-# log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_4a8n24s1h_500_epochs.json"
-# log_name =  "C:\\Users\\joshc\\Google Drive\\CS Research\\Mem_Store_Project\\logs_6a12n24s1h_750_epochs.json"
 
 # Suspend/Resume Function for longer iterations
 try:
@@ -292,7 +252,7 @@ optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
 print("New optimizer is now aware of {} points.".format(len(optimizer.space)))
 
 optimizer.maximize(
-    init_points=0,
+    init_points=5,
     n_iter=40,
 )
 

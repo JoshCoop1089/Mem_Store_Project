@@ -249,7 +249,9 @@ class ContextualBandit:
                     seed_counter += 1
 
                     # BC is too close to other cluster centers
-                    dist_min = min(other_cluster_centers)
+                    dist_min = self.cluster_sep
+                    if other_cluster_centers:
+                        dist_min = min(other_cluster_centers)
                     if dist_min < self.cluster_sep:
                         continue
                     else:

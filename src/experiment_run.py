@@ -26,7 +26,7 @@ try:
 except:
     exp_type = exp_types
 
-training_epochs = 10
+training_epochs = 20
 noise_epochs = 2
 noise_train_percent = 0.2
 noise_train_type = 'right_mask'
@@ -40,7 +40,7 @@ emb_with_mem = True
 # Experiment Difficulty
 hamming_clustering = 1      #Create evenly distributed clusters based on arms/barcodes
 
-num_arms = 5
+num_arms = 10
 num_barcodes = 10
 barcode_size = 20
 noise_percent = [4/20]
@@ -95,12 +95,12 @@ noise_types = [
     # "checkerboard",
     ]
 
-for noise_type in noise_types:
-    if 'embedding' in exp_types and "no_mem" in noise_type:
-        noise_type = noise_type[:-7]
-        emb_with_mem = False
-        exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem]
-
-    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = exp_diff_general + exp_diff_specifics
-    run_experiment(exp_base, exp_difficulty)
+# for noise_type in noise_types:
+#     if 'embedding' in exp_types and "no_mem" in noise_type:
+#         noise_type = noise_type[:-7]
+#         emb_with_mem = False
+        
+#     exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem]
+#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#     exp_difficulty = exp_diff_general + exp_diff_specifics
+#     run_experiment(exp_base, exp_difficulty)
