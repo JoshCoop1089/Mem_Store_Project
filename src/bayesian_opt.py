@@ -15,7 +15,9 @@ def avg_returns(
     entropy_error_coef=0,
     embedding_size=0,
     embedding_learning_rate=0,
-    dropout_coef=0
+    dropout_coef=0,
+    loss_switch=0,
+    embedding_learning_rate_cont=0
 ):
     exp_settings = {}
 
@@ -34,10 +36,9 @@ def avg_returns(
     exp_settings['mem_mode'] = "LSTM"
     # exp_settings['mem_mode'] = "one_layer"
 
-    exp_settings['emb_loss'] = 'contrastive'
-    # exp_settings['emb_loss'] = 'kmeans'
+    # exp_settings['emb_loss'] = 'contrastive'
+    exp_settings['emb_loss'] = 'kmeans'
 
-    exp_settings['freeze_r_gates'] = 0
     exp_settings['emb_with_mem'] = True
 
     # Task Complexity
@@ -70,99 +71,25 @@ def avg_returns(
     # exp_settings["value_error_coef"] = value_error_coef
     # exp_settings['entropy_error_coef'] = entropy_error_coef
     exp_settings['embedder_learning_rate'] = 10**embedding_learning_rate
+    exp_settings['embedder_learning_rate_second_phase'] = 10**embedding_learning_rate_cont
     exp_settings['embedding_size'] = int(2**embedding_size)
     # exp_settings['dropout_coef'] = dropout_coef
     # End HyperParam Searches for BayesOpt#
 
     # Static vals for L2RL testing
-    # 4a8b24s 500 epoch no noise init
-    # exp_settings['dim_hidden_a2c'] = int(2**6.711)
-    # exp_settings['dim_hidden_lstm'] = int(2**6.711)
-    # exp_settings['lstm_learning_rate'] = 10**-3
-    # exp_settings['value_error_coef'] = 0.75
+    # 5a5b10s 800 epoch noise init 20 percen right mask
+    exp_settings['dim_hidden_a2c'] = int(2**8.7326)
+    exp_settings['dim_hidden_lstm'] = int(2**8.7326)
+    exp_settings['lstm_learning_rate'] = 10**-3.2345
+    exp_settings['value_error_coef'] = .90238
+    exp_settings["entropy_error_coef"] = 0.03658
 
-    # # 4a8b24s 500 epoch noise init 25 percent right mask shuffle (0.76256 returns)
-    # exp_settings['dim_hidden_a2c'] = int(2**8.6357)
-    # exp_settings['dim_hidden_lstm'] = int(2**8.6357)
-    # exp_settings['lstm_learning_rate'] = 10**-3.501
-    # exp_settings['value_error_coef'] = 0.7177
-    # exp_settings['entropy_error_coef'] = 0.0004
-
-    # # 4a8b24s 1500 epoch noise init 50 percent right mask shuffle
-    # exp_settings['dim_hidden_a2c'] = 77
-    # exp_settings['dim_hidden_lstm'] = 77
-    # exp_settings['lstm_learning_rate'] = 0.00026
-    # exp_settings['value_error_coef'] = 0.73822
-
-    # # 4a8b40s 1000 epoch noise init 50 percent right mask shuffle
-    # exp_settings['dim_hidden_a2c'] = int(2**9)
-    # exp_settings['dim_hidden_lstm'] = int(2**9)
-    # exp_settings['lstm_learning_rate'] = 10**-3
-    # exp_settings['value_error_coef'] = 0.7441
-    # exp_settings["entropy_error_coef"] = 0.0865
-
-    # # 5a10b10s 500 epoch noise init 20 percent right mask shuffle 0.7139
-    # exp_settings['dim_hidden_a2c'] = int(2**6.9958)
-    # exp_settings['dim_hidden_lstm'] = int(2**6.9958)
-    # exp_settings['lstm_learning_rate'] = 10**-3.0788
-    # exp_settings['value_error_coef'] = 0.9407
-    # exp_settings["entropy_error_coef"] = 0.006
-
-    # # 5a10b10s 500 epoch noise init 40 percent right mask shuffle 0.72252
-    # exp_settings['dim_hidden_a2c'] = int(2**7.0673)
-    # exp_settings['dim_hidden_lstm'] = int(2**7.0673)
-    # exp_settings['lstm_learning_rate'] = 10**-3.4393
-    # exp_settings['value_error_coef'] = 1.0
-    # exp_settings["entropy_error_coef"] = 0.0
-
-    # 5a10b20s 1000 epoch noise init 20 percent right mask shuffle 0.7111 target #3
-    exp_settings['dim_hidden_a2c'] = int(2**7.117)
-    exp_settings['dim_hidden_lstm'] = int(2**7.117)
-    exp_settings['lstm_learning_rate'] = 10**-3.0818
-    exp_settings['value_error_coef'] = .8046
-    exp_settings["entropy_error_coef"] = 0.0446
-
-    # # 5a10b20s 1000 epoch noise init 40 percent right mask shuffle 0.714 target
-    # exp_settings['dim_hidden_a2c'] = int(2**8.4056)
-    # exp_settings['dim_hidden_lstm'] = int(2**8.4056)
-    # exp_settings['lstm_learning_rate'] = 10**-3.017
-    # exp_settings['value_error_coef'] = .9885
-    # exp_settings["entropy_error_coef"] = 0.049
-
-    # # 5a10b40s 1000 epoch noise init 20 percent right mask shuffle 0.7153 target
-    # exp_settings['dim_hidden_a2c'] = int(2**7.2753)
-    # exp_settings['dim_hidden_lstm'] = int(2**7.2753)
-    # exp_settings['lstm_learning_rate'] = 10**-3.5947
-    # exp_settings['value_error_coef'] = .906998
-    # exp_settings["entropy_error_coef"] = 0.04356
-
-    # # 5a10b40s 1200 epoch noise init 40 percent right mask shuffle 0.6923 target
-    # exp_settings['dim_hidden_a2c'] = int(2**6.0873)
-    # exp_settings['dim_hidden_lstm'] = int(2**6.0873)
-    # exp_settings['lstm_learning_rate'] = 10**-3.4539
-    # exp_settings['value_error_coef'] = 1.0
-    # exp_settings["entropy_error_coef"] = 0.09921
-
-    # # 6a12b24s 1000 epoch noise init 25 percent right mask
-    # exp_settings['dim_hidden_a2c'] = int(2**6.597)
-    # exp_settings['dim_hidden_lstm'] = int(2**6.597)
-    # exp_settings['lstm_learning_rate'] = 10**-3.8705
-    # exp_settings['value_error_coef'] = 0.4878
-    # exp_settings["entropy_error_coef"] = 0.0134
-
-    # # 6a12b40s 1500 epoch noise init 25 percent right mask
-    # exp_settings['dim_hidden_a2c'] = int(2**6.0271)
-    # exp_settings['dim_hidden_lstm'] = int(2**6.0271)
-    # exp_settings['lstm_learning_rate'] = 10**-3.8511
-    # exp_settings['value_error_coef'] = 0.8928
-    # exp_settings["entropy_error_coef"] = 0.10297
-
-    # # 6a12b40s 1500 epoch noise init 50 percent right mask
-    # exp_settings['dim_hidden_a2c'] = int(2**7.479)
-    # exp_settings['dim_hidden_lstm'] = int(2**7.479)
-    # exp_settings['lstm_learning_rate'] = 10**-3.6955
-    # exp_settings['value_error_coef'] = 1
-    # exp_settings["entropy_error_coef"] = 0
+    # # 5a10b20s 1000 epoch noise init 20 percent right mask shuffle 0.7111 target #3
+    # exp_settings['dim_hidden_a2c'] = int(2**7.117)
+    # exp_settings['dim_hidden_lstm'] = int(2**7.117)
+    # exp_settings['lstm_learning_rate'] = 10**-3.0818
+    # exp_settings['value_error_coef'] = .8046
+    # exp_settings["entropy_error_coef"] = 0.0446
 
     # # 10a20b40s 3000 epoch noise init 25 percent right mask
     # exp_settings['dim_hidden_a2c'] = int(2**5.514)
@@ -181,7 +108,7 @@ def avg_returns(
     )
     if exp_settings["mem_store"] == "embedding":
         print(
-            f"Emb_LR: {round(exp_settings['embedder_learning_rate'], 5)} | Emb_Size: {exp_settings['embedding_size']} | Dropout: {round(exp_settings['dropout_coef'], 3)}"
+            f"Emb_LR: {round(exp_settings['embedder_learning_rate'], 5)} | Emb_Size: {exp_settings['embedding_size']} | Contrastive LR: {round(exp_settings['embedder_learning_rate_second_phase'], 5)}"
         )
     print(
         f"Val_CF: {round(exp_settings['value_error_coef'], 5)} | Ent_CF: {round(exp_settings['entropy_error_coef'], 5)}"
@@ -189,7 +116,7 @@ def avg_returns(
 
     # Current function being used as maximization target is just avg of total epoch returns
     logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
-    log_return, log_memory_accuracy, epoch_sim_logs, log_embedder_accuracy = logs_for_graphs
+    log_return, log_memory_accuracy, log_embedder_accuracy = logs_for_graphs
     log_loss_value, log_loss_policy, log_loss_total, embedder_loss, contrastive_loss = loss_logs
     log_keys, epoch_mapping = key_data
 
@@ -220,9 +147,11 @@ def avg_returns(
 
 # Bounded region of parameter space
 pbounds = {
-    # 'dim_hidden_a2c': (4, 8),               #transformed into 2**x in function
-    'embedding_learning_rate': (-5, -3),    #transformed into 10**x in function
-    'embedding_size': (4,9),                #transformed into 2**x in function
+    # 'dim_hidden_a2c': (4, 8),                 #transformed into 2**x in function
+    'embedding_learning_rate': (-5, -3),        #transformed into 10**x in function
+    'embedding_learning_rate_cont': (-5, -3),   #transformed into 10**x in function
+    'embedding_size': (4,9),                    #transformed into 2**x in function
+    'loss_switch': (0.2,0.5)                    #Percent of training to switch to contrastive learning
     # 'dropout_coef': (0,0.5),
     # "dim_hidden_lstm": (4, 9),  # transformed into 2**x in function
     # 'entropy_error_coef': (0, 0.2),
@@ -240,7 +169,7 @@ optimizer = BayesianOptimization(
 # log_name = './logs_5a10b20s1h_1000_epochs_noisy_init_20_right.json'
 # log_name = './logs_5a10b20s1h_600_epochs_noisy_init_10_right.json'
 # log_name = './logs_5a10b20s1h_800_epochs_embedder_lstm_noisy_init_10_right.json'
-log_name = './logs_5a10b20s1h_800_epochs_embedder_no_special_lstm_noisy_init_20_right.json'
+log_name = './logs_5a5b10s1h_800_epochs_embedder_noisy_init_20_right_two_phase.json'
 
 # Suspend/Resume Function for longer iterations
 try:

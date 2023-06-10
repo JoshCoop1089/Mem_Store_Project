@@ -26,8 +26,6 @@ def barcodes_are_different(barcode_strings):
     percent_diff = sum(diff)/len(barcode_strings)
     print(percent_diff)
     return
-def calc_contrastive_loss(input_stuff):
-    return episode_loss
 
 def run_experiment_sl(exp_settings):
     """
@@ -133,13 +131,7 @@ def run_experiment_sl(exp_settings):
         filter(lambda p: p.requires_grad, agent.parameters()), lr=learning_rate
     )
 
-    # Freeze a portion of the layers to simulate keeping the R-Gates open for the first portion of training
-    if exp_settings['freeze_r_gates'] > 0 and exp_settings['epochs'] > 0:
-        r_gate_indicies = [x for x in range(3*dim_hidden_lstm,4*dim_hidden_lstm)]
-        i2h_weight_hook, i2h_bias_hook = freeze_linear_params(agent.i2h, r_gate_indicies)
-        h2h_weight_hook, h2h_bias_hook = freeze_linear_params(agent.h2h, r_gate_indicies)
-
-    if exp_settings["load_pretrained_model"]:
+    if exp_settings["load_pretrained_model"] or exp_settings['switch_to_contrastive']:
         # Load trained weights
         agent.load_state_dict(torch.load(f"model/{exp_settings['exp_name']}.pt", map_location = device))
         if exp_settings["mem_store"] == "embedding":
@@ -181,9 +173,6 @@ def run_experiment_sl(exp_settings):
     log_bc_guess_accuracy = np.zeros(
         n_epochs,
     )
-    log_r_gate_sum = np.zeros(
-        n_epochs,
-    )
 
     # Save keys during training at 0%, 33%, 66% and 100% of total train time
     early_keys = [int(x * exp_settings['epochs'] // 20) for x in range(1,6)]
@@ -203,10 +192,12 @@ def run_experiment_sl(exp_settings):
     else:
         key_save_epochs = train_epochs + noise_epochs
 
-    # Data stroage for K-Means Barcode guesses
+    # Data storage for K-Means Barcode guesses
     avg_inputs = np.zeros((episodes_per_epoch*pulls_per_episode, dim_input_lstm))
-
+   
+    big_ol_zero = torch.tensor(0, dtype=torch.float32, device = device)
     print("\n", "-*-_-*- " * 3, "\n")
+    # with torch.autograd.set_detect_anomaly(True):
     # loop over epoch
     for i in range(n_epochs):
         # Set to no_grad if in noise eval portion
@@ -256,7 +247,12 @@ def run_experiment_sl(exp_settings):
                 h_t, c_t = agent.get_init_states()
                 if exp_settings['mem_store'] == 'embedding':
                     emb_model = agent.dnd.embedder
-                    emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states()
+                    if exp_settings['mem_mode'] == "LSTM":
+                        emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states(
+                            exp_settings['embedding_size'])
+                    if exp_settings['mem_mode'] == "dense_LSTM":
+                        emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states(
+                            exp_settings['embedding_size']//2)
 
                 # Always use ground truth bc for reward eval
                 real_bc = barcode_strings[m][0][0]
@@ -445,19 +441,6 @@ def run_experiment_sl(exp_settings):
                         (one_hot_action, next_bc, r_t.view(1, 1)), dim=1
                     )
 
-                    log_r_gate_sum[i] += torch.div(torch.sum(r_gate), exp_settings['dim_hidden_lstm']*episodes_per_epoch*pulls_per_episode)
-
-                    # Look at R-Gate values in the final training epoch
-                    if (
-                        exp_settings["tensorboard_logging"]
-                        and i == exp_settings["epochs"] - 1
-                    ):
-                        tb.add_histogram(
-                            "R-Gate Sigmoided Train Final Epoch",
-                            r_gate,
-                            t + m * pulls_per_episode,
-                        )
-
                 # LSTM/A2C Loss for Episode
                 returns = compute_returns(rewards, device, gamma=0.0)
                 loss_policy, loss_value, entropies_tensor = compute_a2c_loss(
@@ -472,24 +455,26 @@ def run_experiment_sl(exp_settings):
                 # Only perform model updates during train phase
                 if apply_noise < 0:
                     if exp_settings["mem_store"] == "embedding":
+
                         # Embedder Loss for Episode
                         a_dnd = agent.dnd
                         
-                        # Need to do a math sweep over this code implementation.  Also prob should reduce loss by a constant factor
                         # if exp_settings['emb_loss'] == 'contrastive':
-                        """
-                        embA are from current episode
-                        create all pairs from embA, label as similar
-                        if not first episode:
-                            retrieve embeddings from last episode (embB)
-                            create all pairs from embA and embB, label as different
-                        """
+                        # Check same/diff barcodes against previous episode
+                        if exp_settings['emb_loss'] == 'groundtruth':
+                            cur_episode_id = cross_ent_loss_tensor
+                        elif exp_settings['emb_loss'] == 'kmeans' and i > 0:
+                            barcode_sims = torch.nn.functional.cosine_similarity(input_to_lstm, a_dnd.barcode_guesses)
+                            cur_episode_id = torch.argmax(barcode_sims).view(1)
+                        else:
+                            cur_episode_id = big_ol_zero
+
                         embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
                         embA_stack = torch.stack(embA)
                         x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
 
                         # Avoid doublecounting positive pairs
-                        x_dist = (torch.ones_like(x, device = device) - x)/2
+                        x_dist = (torch.square(x))/2
 
                         pos_output = torch.sum(x_dist)
                         neg_output = torch.tensor(0, device = device)
@@ -497,13 +482,19 @@ def run_experiment_sl(exp_settings):
                             negs = vectorize_cos_sim(
                                 embA_stack, embB_stack, device, same = False)
                             
-                            # Far apart negatives should not contribute to loss bc cos will be closer to 0
-                            neg_dist = torch.ones_like(negs, device = device)-negs  
+                            # Remove Negatives
+                            if torch.ne(cur_episode_id, prev_episode_id):
+                                negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
 
-                            # print(neg_dist)
-                            neg_output = torch.sum(neg_dist)
+                            neg_output = torch.sum(torch.square(negs))
+                            
                         embB_stack = embA_stack.detach().clone()
-                        episode_loss = torch.div((pos_output+neg_output), 2).detach().clone().requires_grad_(True)
+                        prev_episode_id = cur_episode_id
+
+                        # Finding avg loss over the x pulls of an episode
+                        scale_factor = 1.5*pulls_per_episode
+                        
+                        episode_loss = torch.div((pos_output+neg_output), scale_factor).detach().clone().requires_grad_(True)
                         a_dnd.contrastive_loss[i] += torch.div(episode_loss, episodes_per_epoch)
 
                         if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'groundtruth':
@@ -515,6 +506,10 @@ def run_experiment_sl(exp_settings):
                         # Unfreeze Embedder
                         for name, param in a_dnd.embedder.named_parameters():
                             param.requires_grad = True
+
+                        if exp_settings['emb_loss'] == 'contrastive':
+                            a_dnd.embedder.e2c.weight.requires_grad = False
+                            a_dnd.embedder.e2c.bias.requires_grad = False
 
                         # Freeze LSTM/A2C
                         layers = [agent.i2h, agent.h2h, agent.a2c]
@@ -542,19 +537,11 @@ def run_experiment_sl(exp_settings):
                     loss.backward()
                     optimizer.step()
                     optimizer.zero_grad()
-
-                    # Reset the hook on the R-Gates after having kept them frozen until a specified epoch
-                    if i == exp_settings['freeze_r_gates'] and i > 0 and m == 0 and exp_settings['epochs'] > 0:
-                        i2h_weight_hook.remove()
-                        i2h_bias_hook.remove()
-                        h2h_weight_hook.remove()
-                        h2h_bias_hook.remove()
                         
                 # Updating avg return per episode
                 log_return[i] += torch.div(
                     cumulative_reward, (episodes_per_epoch * pulls_per_episode)
                 )
-
 
                 # Updating avg accuracy per episode
                 log_bc_guess_accuracy[i] += torch.div(agent.unsure_bc_guess, (episodes_per_epoch*pulls_per_episode))
@@ -675,7 +662,7 @@ def run_experiment_sl(exp_settings):
     )
     print("- - - " * 3)
 
-    logs_for_graphs = log_return, log_memory_accuracy, log_r_gate_sum, log_embedder_accuracy
+    logs_for_graphs = log_return, log_memory_accuracy, log_embedder_accuracy
     loss_logs = log_loss_value, log_loss_policy, log_loss_total, agent.dnd.embedder_loss, agent.dnd.contrastive_loss
     key_data = log_keys, epoch_mapping
 

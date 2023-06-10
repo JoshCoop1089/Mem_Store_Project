@@ -200,16 +200,15 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
         if graph_type == "Returns":
             axes.set_ylim([0.1, 0.9])
             data = np.load(exp_name1)["tot_rets"]
+            if exp_settings['epochs']:
+                data = data[:exp_settings['epochs']]
 
         # Accuracy
         elif graph_type == "Accuracy":
             axes.set_ylim([0, 1])
             data = np.load(exp_name1)["tot_acc"]
-
-        # R-Gate Avg Activations
-        elif graph_type == "R-Gates":
-            axes.set_ylim([0, 1])
-            data = np.load(exp_name1)["r_gate_sum"]
+            if exp_settings['epochs']:
+                data = data[:exp_settings['epochs']]
 
         # Embedder Loss
         elif graph_type == "Embedder Loss":
@@ -530,26 +529,18 @@ if __name__ == "__main__":
     # Experiment Difficulty
     # stats = [2,4,8, 0.2]
     # stats = [5,10,20, 0.2]
-    # stats = [8,16,40, 0.2]
+    # stats = [8, 16, 40, 0.2]
+    # stats = [5, 5, 10, 0.2]
+    # stats = [10,10,10, 0.0]
     stats = [10,10,20, 0.2]
 
-    # stats = [4,8,24, 0.25]
-    # stats = [4,8,40]
-    # stats = [6,12,24, 0.25]
-    # stats = [10,20,40,0.25]
-    # stats = [5,10,10, 0.2]
-    # stats = [5,10,10, 0.4]
-    # stats = [5,10,20, 0]
-    # stats = [5,10,20, 0.1]
-    # stats = [5,10,20, 0.4]
-    # stats = [5,10,40, 0.2]
-    # stats = [5,10,40, 0.4]
 
     # noise_eval = True
     noise_eval = False
     # exp_types = ['embedding']
     # exp_types = ['context', 'embedding_LSTM_groundtruth', 'L2RL']
-    exp_types = ['context', 'embedding_LSTM_kmeans', 'L2RL']
+    exp_types = ['context', 'embedding_dense_LSTM_kmeans', 'L2RL']
+    # exp_types = ['context', 'embedding_LSTM_kmeans', 'L2RL']
     # exp_types = ['context', 'embedding_LSTM_contrastive', 'L2RL']
     # exp_types = ['embedding_LSTM_contrastive']
     # exp_types = ['embedding_LSTM_kmeans']

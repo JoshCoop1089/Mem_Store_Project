@@ -65,18 +65,16 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["hamming_threshold"] = 0
 
     # Mem Modes: LSTM, one_layer, two_layer
-    exp_settings['mem_mode'] = 'LSTM'
+    # exp_settings['mem_mode'] = 'LSTM'
+    exp_settings['mem_mode'] = 'dense_LSTM'
 
     # Loss Types for Embedder
     # exp_settings['emb_loss'] = 'contrastive'
-    # exp_settings['emb_loss'] = 'kmeans'
-    exp_settings['emb_loss'] = 'groundtruth'
+    exp_settings['emb_loss'] = 'kmeans'
+    # exp_settings['emb_loss'] = 'groundtruth'
 
     # Evaluate Emb Model without Mem
     exp_settings['emb_with_mem'] = True
-
-    # Stopping Early training R_Gate updates
-    exp_settings['freeze_r_gates'] = 0
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
@@ -92,7 +90,11 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["entropy_error_coef"] = 0.0391
     exp_settings["lstm_learning_rate"] = 10**-3.332  # 4.66e-4
     exp_settings["value_error_coef"] = 0.62
-    exp_settings["dropout_coef"] = 0
+    exp_settings["dropout_coef"] = 0.25
+
+    # Change loss type from k-means to contrastive after k-means has stabalized the embedder
+    if exp_settings['epochs'] > 0 and exp_settings['emb_loss'] == 'kmeans':
+        pass
 
     # Experimental Variables
     (
@@ -112,7 +114,7 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["pulls_per_episode"],
         exp_settings["noise_percent"],
         exp_settings['emb_loss'],
-        exp_settings['emb_with_mem']
+        exp_settings['emb_with_mem'],
     ) = exp_difficulty
 
     # Task Size specific hyperparams
@@ -121,10 +123,6 @@ def run_experiment(exp_base, exp_difficulty):
     exp_length = exp_settings["epochs"] + exp_settings["noise_eval_epochs"] * len(
         exp_settings["noise_percent"]
     )
-
-    # Freezing R_Gate Values during Training
-    if exp_settings['epochs'] > 0 and exp_settings['emb_loss'] == 'contrastive':
-        exp_settings['freeze_r_gates'] = int(0.1*exp_length)
 
     # Safety Assertions
     assert exp_length >= 10, "Total number of epochs must be greater than 10"
@@ -153,7 +151,7 @@ def run_experiment(exp_base, exp_difficulty):
             exp_settings['noise_train_percent'],
             exp_settings['mem_mode'],
             exp_settings['emb_loss'],
-            exp_settings['emb_with_mem']
+            exp_settings['emb_with_mem'],
         ],
         dtype=object,
     )
@@ -189,7 +187,7 @@ def run_experiment(exp_base, exp_difficulty):
         )
         if exp_settings["mem_store"] == "embedding":
             print(
-                f"Emb_LR: {round(exp_settings['embedder_learning_rate'], 5)} | Emb_Size: {exp_settings['embedding_size']} | Dropout: {round(exp_settings['dropout_coef'], 3)}"
+                f"Emb_LR: {round(exp_settings['embedder_learning_rate'], 5)} | Emb_Size: {exp_settings['embedding_size']}"
             )
             print(
                 f"Memory Mode: {exp_settings['mem_mode']} | Emb Loss: {exp_settings['emb_loss']}")
@@ -212,7 +210,7 @@ def run_experiment(exp_base, exp_difficulty):
 
             logs_for_graphs, loss_logs, key_data = run_experiment_sl(
                 exp_settings)
-            log_return, log_memory_accuracy, log_r_gate_sum, log_embedder_accuracy = logs_for_graphs
+            log_return, log_memory_accuracy, log_embedder_accuracy = logs_for_graphs
             log_loss_value, log_loss_policy, log_loss_total, embedder_loss, contrastive_loss = loss_logs
             log_keys, epoch_mapping = key_data
 

@@ -199,17 +199,23 @@ class DND:
 
         # Treat model as predicting a single id for a class label, based on the order in self.sorted_key_list
         # Calc Loss for single pull for updates at end of episode
-        emb_loss = self.criterion(model_output, real_label_id)
+        if self.exp_settings['emb_loss'] != 'contrastive':
+            emb_loss = self.criterion(model_output, real_label_id)
+        
+            # Get class ID number for predicted barcode
+            soft = torch.softmax(model_output, dim=1)
+            pred_memory_id = torch.argmax(soft)
+            self.pred_accuracy += int(torch.eq(pred_memory_id, real_label_id))
+
+        else:
+            emb_loss = self.embedder.big_ol_zero
+            self.pred_accuracy += 0
 
         # Freeze Embedder model until next memory retrieval
         for name, param in agent.named_parameters():
             param.requires_grad = False
 
-        # Get class ID number for predicted barcode
-        soft = torch.softmax(model_output, dim=1)
-        pred_memory_id = torch.argmax(soft)
-        self.pred_accuracy += int(torch.eq(pred_memory_id, real_label_id))
-        if len(self.barcode_guesses) > 0:
+        if len(self.barcode_guesses) > 0 and self.exp_settings['emb_loss'] != 'contrastive':
             predicted_context = self.barcode_guesses[pred_memory_id]
         else:
             predicted_context = _empty_barcode(self.exp_settings['barcode_size'])

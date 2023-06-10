@@ -17,27 +17,44 @@ class Embedder(nn.Module):
 
         self.mem_mode = exp_settings["mem_mode"]
 
+        self.big_ol_zero = torch.tensor([0.0], device = self.device, requires_grad=False)
+
         # Basic Layers
-        self.h2m = nn.Linear(
-            self.input_dim, 2 * self.embedding_size, bias=bias, device=device
-        )		
-        self.m2c = nn.Linear(
-            2*self.embedding_size, self.embedding_size, bias=bias, device = device
-        )
+        if self.mem_mode == "one_layer" or self.mem_mode == "two_layer":
+            self.h2m = nn.Linear(
+                self.input_dim, 2 * self.embedding_size, bias=bias, device=device
+            )		
+            if self.mem_mode == "two_layer":
+                self.m2c = nn.Linear(
+                    2*self.embedding_size, self.embedding_size, bias=bias, device = device
+                )
+
         self.e2c = nn.Linear(
-            self.embedding_size, self.num_barcodes, bias=bias, device=device
+            self.embedding_size//2, self.num_barcodes, bias=bias, device=device
         )
 
         # LSTM2 Core
-        self.LSTM = nn.LSTM(input_size = self.input_dim, hidden_size = self.embedding_size, device = self.device)
-        self.h_lstm, self.c_lstm = self.emb_get_init_states()
+        if self.mem_mode == "LSTM":
+            self.LSTM = nn.LSTM(input_size = self.input_dim, hidden_size = self.embedding_size, device = self.device)
+            self.h_lstm, self.c_lstm = self.emb_get_init_states(self.embedding_size)
+            self.l2i = nn.Linear(
+                self.embedding_size, self.embedding_size//2, bias=bias, device=device
+            )
+
+        if self.mem_mode == "dense_LSTM":
+            self.L1toD = nn.Linear(
+                self.input_dim, self.embedding_size, bias=bias, device=device
+            )
+            self.LSTM = nn.LSTM(input_size = self.embedding_size, hidden_size = self.embedding_size//2, device = self.device)
+            self.h_lstm, self.c_lstm = self.emb_get_init_states(self.embedding_size//2)
+
 
         # init
         self.reset_parameter()
 
-    def emb_get_init_states(self, scale=0.1):
-        h_0 = torch.randn(1, self.embedding_size, device=self.device) * scale
-        c_0 = torch.randn(1, self.embedding_size, device=self.device) * scale
+    def emb_get_init_states(self, lstm_hidden_dim, scale=0.1):
+        h_0 = torch.randn(1, lstm_hidden_dim, device=self.device) * scale
+        c_0 = torch.randn(1, lstm_hidden_dim, device=self.device) * scale
         return h_0, c_0
 
     # Model should return an embedding and a context
@@ -51,10 +68,21 @@ class Embedder(nn.Module):
         elif self.mem_mode == 'LSTM':
             x, (h1,c1)  = self.LSTM(h, (self.h_lstm,self.c_lstm))
             self.h_lstm, self.c_lstm = h1,c1
+            x = self.l2i(F.leaky_relu(x))
+        elif self.mem_mode == 'dense_LSTM':
+            x = nn.Dropout(self.dropout_coef)(h)
+            x = self.L1toD(F.leaky_relu(x))
+            x, (h1,c1)  = self.LSTM(x, (self.h_lstm,self.c_lstm))
+            self.h_lstm, self.c_lstm = h1,c1
         else:
             raise ValueError("Incorrect mem_mode spelling")
+        
         embedding = x
-        predicted_context = self.e2c(F.leaky_relu(x))
+
+        if self.exp_settings['emb_loss'] != 'contrastive':
+            predicted_context = self.e2c(F.leaky_relu(x))
+        else:
+            predicted_context = self.big_ol_zero
 
         return embedding, predicted_context
 
