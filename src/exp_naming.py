@@ -65,8 +65,7 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["hamming_threshold"] = 0
 
     # Mem Modes: LSTM, one_layer, two_layer
-    # exp_settings['mem_mode'] = 'LSTM'
-    exp_settings['mem_mode'] = 'dense_LSTM'
+    exp_settings['mem_mode'] = 'LSTM'
 
     # Loss Types for Embedder
     # exp_settings['emb_loss'] = 'contrastive'
@@ -92,10 +91,6 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["value_error_coef"] = 0.62
     exp_settings["dropout_coef"] = 0.25
 
-    # Change loss type from k-means to contrastive after k-means has stabalized the embedder
-    if exp_settings['epochs'] > 0 and exp_settings['emb_loss'] == 'kmeans':
-        pass
-
     # Experimental Variables
     (
         mem_store_types,
@@ -115,10 +110,14 @@ def run_experiment(exp_base, exp_difficulty):
         exp_settings["noise_percent"],
         exp_settings['emb_loss'],
         exp_settings['emb_with_mem'],
+        exp_settings['switch_to_contrastive']
     ) = exp_difficulty
 
     # Task Size specific hyperparams
     exp_settings = get_hyperparameters(exp_settings)
+
+    if exp_settings['switch_to_contrastive']:
+        exp_settings['embedder_learning_rate'] = 0.005
 
     exp_length = exp_settings["epochs"] + exp_settings["noise_eval_epochs"] * len(
         exp_settings["noise_percent"]

@@ -38,7 +38,6 @@ def run_exp(input_val):
     # exp_settings["mem_store"] = "L2RL"
     exp_settings["mem_store"] = "embedding"
     exp_settings['mem_mode'] = "LSTM"
-    # exp_settings['mem_mode'] = "dense_LSTM"
     exp_settings['emb_loss'] = 'kmeans'
     # exp_settings['emb_loss'] = 'contrastive'
 

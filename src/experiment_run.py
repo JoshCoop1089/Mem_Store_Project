@@ -17,16 +17,16 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 #context, embedding, L2RL
 
 # exp_types = ['context', 'embedding']
-# exp_types = ['context', 'embedding', 'L2RL']
+exp_types = ['context', 'embedding', 'L2RL']
 # exp_types = ['context']
-exp_types = ['embedding']
+# exp_types = ['embedding']
 
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
 
-training_epochs = 2000
+training_epochs = 1000
 noise_epochs = 40
 
 noise_train_percent = 0.2
@@ -37,6 +37,7 @@ emb_loss = 'kmeans'
 # emb_loss = 'contrastive'
 
 emb_with_mem = True
+switch_to_contrastive = False
 
 # Experiment Difficulty
 hamming_clustering = 1      #Create evenly distributed clusters based on arms/barcodes
@@ -66,7 +67,7 @@ noise_types = [
 num_repeats = 1
 
 exp_diff_general = [hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode]
-exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem]
+exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrastive]
 
 # Modify this to fit your machines save paths
 figure_save_location = "..\\Mem_Store_Project\\figs\\"
@@ -77,7 +78,19 @@ for noise_type in noise_types:
     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
     exp_difficulty = exp_diff_general + exp_diff_specifics
     run_experiment(exp_base, exp_difficulty)
-    
+
+# After training K-Means, load in weights and train Contrastive
+switch_to_contrastive = True
+emb_loss = 'contrastive'
+exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrastive]
+training_epochs = 1000
+noise_epochs = 40
+
+for noise_type in noise_types:
+    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+    exp_difficulty = exp_diff_general + exp_diff_specifics
+    run_experiment(exp_base, exp_difficulty)
+ 
 # Eval Model on different noise types
 training_epochs = 0
 noise_epochs = 40
@@ -101,7 +114,8 @@ for noise_type in noise_types:
         noise_type = noise_type[:-7]
         emb_with_mem = False
         
-    exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem]
+    exp_diff_specifics = [noise_percent, emb_loss,
+                          emb_with_mem, switch_to_contrastive]
     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
     exp_difficulty = exp_diff_general + exp_diff_specifics
     run_experiment(exp_base, exp_difficulty)

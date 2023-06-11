@@ -41,14 +41,6 @@ class Embedder(nn.Module):
                 self.embedding_size, self.embedding_size//2, bias=bias, device=device
             )
 
-        if self.mem_mode == "dense_LSTM":
-            self.L1toD = nn.Linear(
-                self.input_dim, self.embedding_size, bias=bias, device=device
-            )
-            self.LSTM = nn.LSTM(input_size = self.embedding_size, hidden_size = self.embedding_size//2, device = self.device)
-            self.h_lstm, self.c_lstm = self.emb_get_init_states(self.embedding_size//2)
-
-
         # init
         self.reset_parameter()
 
@@ -69,11 +61,6 @@ class Embedder(nn.Module):
             x, (h1,c1)  = self.LSTM(h, (self.h_lstm,self.c_lstm))
             self.h_lstm, self.c_lstm = h1,c1
             x = self.l2i(F.leaky_relu(x))
-        elif self.mem_mode == 'dense_LSTM':
-            x = nn.Dropout(self.dropout_coef)(h)
-            x = self.L1toD(F.leaky_relu(x))
-            x, (h1,c1)  = self.LSTM(x, (self.h_lstm,self.c_lstm))
-            self.h_lstm, self.c_lstm = h1,c1
         else:
             raise ValueError("Incorrect mem_mode spelling")
         

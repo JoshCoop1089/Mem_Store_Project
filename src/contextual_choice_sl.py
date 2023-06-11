@@ -49,10 +49,6 @@ def run_experiment_sl(exp_settings):
     embedder_learning_rate: float (learning rate for the Embedder-Barcode Prediction optimizer)
     task_version: string (bandit or original QiHong task)
     """
-    # Tensorboard viewing
-    if exp_settings["tensorboard_logging"]:
-        cur_date = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
-        tb = SummaryWriter(log_dir=f"runs/{exp_settings['exp_name']}_{cur_date}")
 
     # See Experimental parameters for GPU vs CPU choices
     if exp_settings["torch_device"] == "CPU":
@@ -132,15 +128,23 @@ def run_experiment_sl(exp_settings):
     )
 
     if exp_settings["load_pretrained_model"] or exp_settings['switch_to_contrastive']:
+
+        if exp_settings['load_pretrained_model']:
+            model_name = exp_settings['exp_name']
+
+        # Load the K-Means weights, but still save under the contrastive label
+        elif exp_settings['switch_to_contrastive']:
+            model_name = exp_settings['exp_name'].replace("contrastive", "kmeans")
+
         # Load trained weights
-        agent.load_state_dict(torch.load(f"model/{exp_settings['exp_name']}.pt", map_location = device))
+        agent.load_state_dict(torch.load(f"model/{model_name}.pt", map_location = device))
         if exp_settings["mem_store"] == "embedding":
             agent.dnd.embedder.load_state_dict(
-                torch.load(f"model/{exp_settings['exp_name']}_embedder.pt", map_location = device)
+                torch.load(f"model/{model_name}_embedder.pt", map_location = device)
             )
 
         # Load clusters of barcodes
-        task.cluster_lists = np.load(f"model/{exp_settings['exp_name']}.npz")[
+        task.cluster_lists = np.load(f"model/{model_name}.npz")[
             "cluster_lists"
         ].tolist()
         print("--> Model loaded from disk <--")
@@ -173,6 +177,12 @@ def run_experiment_sl(exp_settings):
     log_bc_guess_accuracy = np.zeros(
         n_epochs,
     )
+
+    # Tensorboard viewing
+    if exp_settings["tensorboard_logging"]:
+        cur_date = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
+        tb = SummaryWriter(
+            log_dir=f"runs/{exp_settings['exp_name']}_{cur_date}")
 
     # Save keys during training at 0%, 33%, 66% and 100% of total train time
     early_keys = [int(x * exp_settings['epochs'] // 20) for x in range(1,6)]
@@ -250,9 +260,6 @@ def run_experiment_sl(exp_settings):
                     if exp_settings['mem_mode'] == "LSTM":
                         emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states(
                             exp_settings['embedding_size'])
-                    if exp_settings['mem_mode'] == "dense_LSTM":
-                        emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states(
-                            exp_settings['embedding_size']//2)
 
                 # Always use ground truth bc for reward eval
                 real_bc = barcode_strings[m][0][0]
@@ -459,43 +466,43 @@ def run_experiment_sl(exp_settings):
                         # Embedder Loss for Episode
                         a_dnd = agent.dnd
                         
-                        # if exp_settings['emb_loss'] == 'contrastive':
-                        # Check same/diff barcodes against previous episode
-                        if exp_settings['emb_loss'] == 'groundtruth':
-                            cur_episode_id = cross_ent_loss_tensor
-                        elif exp_settings['emb_loss'] == 'kmeans' and i > 0:
+                        if exp_settings['emb_loss'] == 'contrastive':
+                            # Check same/diff barcodes against previous episode
+                            # if exp_settings['emb_loss'] == 'groundtruth':
+                            #     cur_episode_id = cross_ent_loss_tensor
+                            # elif exp_settings['emb_loss'] == 'kmeans' and i > 0:
                             barcode_sims = torch.nn.functional.cosine_similarity(input_to_lstm, a_dnd.barcode_guesses)
                             cur_episode_id = torch.argmax(barcode_sims).view(1)
-                        else:
-                            cur_episode_id = big_ol_zero
+                            # else:
+                            #     cur_episode_id = big_ol_zero
 
-                        embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
-                        embA_stack = torch.stack(embA)
-                        x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
+                            embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
+                            embA_stack = torch.stack(embA)
+                            x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
 
-                        # Avoid doublecounting positive pairs
-                        x_dist = (torch.square(x))/2
+                            # Avoid doublecounting positive pairs
+                            x_dist = (torch.square(x))/2
 
-                        pos_output = torch.sum(x_dist)
-                        neg_output = torch.tensor(0, device = device)
-                        if m > 0:
-                            negs = vectorize_cos_sim(
-                                embA_stack, embB_stack, device, same = False)
+                            pos_output = torch.sum(x_dist)
+                            neg_output = torch.tensor(0, device = device)
+                            if m > 0:
+                                negs = vectorize_cos_sim(
+                                    embA_stack, embB_stack, device, same = False)
+                                
+                                # Remove Negatives
+                                if torch.ne(cur_episode_id, prev_episode_id):
+                                    negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
+
+                                neg_output = torch.sum(torch.square(negs))
+                                
+                            embB_stack = embA_stack.detach().clone()
+                            prev_episode_id = cur_episode_id
+
+                            # Finding avg loss over the x pulls of an episode
+                            scale_factor = 1.5*pulls_per_episode
                             
-                            # Remove Negatives
-                            if torch.ne(cur_episode_id, prev_episode_id):
-                                negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
-
-                            neg_output = torch.sum(torch.square(negs))
-                            
-                        embB_stack = embA_stack.detach().clone()
-                        prev_episode_id = cur_episode_id
-
-                        # Finding avg loss over the x pulls of an episode
-                        scale_factor = 1.5*pulls_per_episode
-                        
-                        episode_loss = torch.div((pos_output+neg_output), scale_factor).detach().clone().requires_grad_(True)
-                        a_dnd.contrastive_loss[i] += torch.div(episode_loss, episodes_per_epoch)
+                            episode_loss = torch.div((pos_output+neg_output), scale_factor).detach().clone().requires_grad_(True)
+                            a_dnd.contrastive_loss[i] += torch.div(episode_loss, episodes_per_epoch)
 
                         if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'groundtruth':
                             loss_vals = [x[2] for x in a_dnd.trial_buffer]
