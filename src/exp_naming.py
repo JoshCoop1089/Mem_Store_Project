@@ -169,6 +169,9 @@ def run_experiment(exp_base, exp_difficulty):
         tot_emb_acc = np.zeros(exp_length)
         tot_emb_loss = np.zeros(exp_length)
         tot_cont_loss = np.zeros(exp_length)
+        tot_cont_pos_loss = np.zeros(exp_length)
+        tot_cont_neg_loss = np.zeros(exp_length)
+
         exp_settings["mem_store"] = mem_store
         exp_name = exp_size + exp_other + f"_{exp_settings['mem_store']}"
         if exp_settings['mem_store'] == 'embedding':
@@ -218,7 +221,9 @@ def run_experiment(exp_base, exp_difficulty):
             tot_acc += log_memory_accuracy / num_repeats
             tot_emb_acc += log_embedder_accuracy / num_repeats
             tot_emb_loss += embedder_loss / num_repeats
-            tot_cont_loss += contrastive_loss / num_repeats
+            tot_cont_loss += contrastive_loss[0] / num_repeats
+            tot_cont_pos_loss += contrastive_loss[1] / num_repeats
+            tot_cont_neg_loss += contrastive_loss[2] / num_repeats
 
         if exp_length >= 200:
             if exp_settings["epochs"] < 25:
@@ -241,5 +246,7 @@ def run_experiment(exp_base, exp_difficulty):
                 tot_emb_acc=tot_emb_acc,
                 tot_emb_loss=tot_emb_loss,
                 tot_cont_loss=tot_cont_loss,
+                tot_cont_pos_loss=tot_cont_pos_loss,
+                tot_cont_neg_loss=tot_cont_neg_loss,
             )
     ### End of Experiment Data

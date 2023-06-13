@@ -37,14 +37,17 @@ def run_exp(input_val):
     exp_settings["kernel"] = "cosine"
     # exp_settings["mem_store"] = "L2RL"
     exp_settings["mem_store"] = "embedding"
+
     exp_settings['mem_mode'] = "LSTM"
-    exp_settings['emb_loss'] = 'kmeans'
-    # exp_settings['emb_loss'] = 'contrastive'
+
+    # exp_settings['emb_loss'] = 'kmeans'
+    exp_settings['emb_loss'] = 'contrastive'
+    exp_settings['switch_to_contrastive'] = True
 
     # Task Complexity
     exp_settings["num_arms"] = 10
     exp_settings["num_barcodes"] = 10
-    exp_settings["barcode_size"] = 10
+    exp_settings["barcode_size"] = 20
     exp_settings["epochs"] = 1000
     exp_settings["noise_eval_epochs"] = 50
     exp_settings['dropout_coef'] = 0
@@ -53,14 +56,22 @@ def run_exp(input_val):
     # Noise Complexity
     exp_settings["hamming_threshold"] = 1
     exp_settings["pulls_per_episode"] = 10
-    exp_settings["noise_percent"] = [0.0]
+    exp_settings["noise_percent"] = [0.2]
     exp_settings["noise_type"] = "random"
-    exp_settings["noise_train_percent"] = 0.0
+    exp_settings["noise_train_percent"] = 0.2
     exp_settings['noise_train_type'] = 'right_mask'
     exp_settings['perfect_noise'] = False
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
+
+    # Naming convention automation
+    exp_size = f"{exp_settings['num_arms']}a{exp_settings['num_barcodes']}b{exp_settings['barcode_size']}s"
+    exp_other = f"{exp_settings['hamming_threshold']}h{int(100*exp_settings['noise_train_percent'])}n"
+    exp_name = exp_size + exp_other + f"_{exp_settings['mem_store']}"
+    if exp_settings['mem_store'] == 'embedding':
+        exp_name += f"_{exp_settings['mem_mode']}_{exp_settings['emb_loss']}"
+    exp_settings["exp_name"] = exp_name
     ### End of Experimental Parameters ###
 
     # # HyperParam Searches for BayesOpt #
@@ -80,24 +91,25 @@ def run_exp(input_val):
     # exp_settings['value_error_coef'] = 0.9024
     # exp_settings["entropy_error_coef"] = 0.03658
 
-    # # 10a10b10s
-    exp_settings['dim_hidden_a2c'] = int(2**8.6357)
-    exp_settings['dim_hidden_lstm'] = int(2**8.6357)
-    exp_settings['lstm_learning_rate'] = 10**-3.501
-    exp_settings['value_error_coef'] = 0.7177
-    exp_settings["entropy_error_coef"] = 0.0004
+    # # # 10a10b10s
+    # exp_settings['dim_hidden_a2c'] = int(2**8.6357)
+    # exp_settings['dim_hidden_lstm'] = int(2**8.6357)
+    # exp_settings['lstm_learning_rate'] = 10**-3.501
+    # exp_settings['value_error_coef'] = 0.7177
+    # exp_settings["entropy_error_coef"] = 0.0004
 
-    # # 10a10b20s
-    # exp_settings['dim_hidden_a2c'] = int(2**8.11)
-    # exp_settings['dim_hidden_lstm'] = int(2**8.11)
-    # exp_settings['lstm_learning_rate'] = 10**-3.0788
-    # exp_settings['value_error_coef'] = 0.4495
-    # exp_settings["entropy_error_coef"] = 0.00
+    # 10a10b20s
+    exp_settings['dim_hidden_a2c'] = int(2**8.11)
+    exp_settings['dim_hidden_lstm'] = int(2**8.11)
+    exp_settings['lstm_learning_rate'] = 10**-3.0788
+    exp_settings['value_error_coef'] = 0.4495
+    exp_settings["entropy_error_coef"] = 0.00
+    exp_settings['embedding_size'] = int(2**7.27899)
 
     raw_emb, raw_emb_lr, loss_switch = input_val
     exp_settings['embedder_learning_rate'] = 10**raw_emb_lr
-    exp_settings['embedding_size'] = int(2**raw_emb)
-    exp_settings['dropout_coef'] = loss_switch
+    # exp_settings['embedding_size'] = int(2**raw_emb)
+    # exp_settings['dropout_coef'] = loss_switch
 
     # Print out current hyperparams to console
     print("\nNext Run Commencing with the following params:")
@@ -138,8 +150,10 @@ def run_exp(input_val):
     )
 
     # out_text = f"('target': {no_noise_eval}, 'params': ('dim_hidden_lstm': {raw_lstm}, 'entropy_error_coef': {raw_ent_cf}, 'lstm_learning_rate': {raw_lr}, 'value_error_coef': {raw_val_cf}))" 
-    out_text = f"('target': {no_noise_eval*no_noise_accuracy}, 'params': ('embedding_learning_rate': {raw_emb_lr}, 'embedding_size': {raw_emb}, 'dropout_coef': {loss_switch}))" 
+    # out_text = f"('target': {no_noise_eval*no_noise_accuracy}, 'params': ('embedding_learning_rate': {raw_emb_lr}, 'embedding_size': {raw_emb}, 'dropout_coef': {loss_switch}))" 
+    out_text = f"('target': {no_noise_eval*no_noise_accuracy}, 'params': ('embedding_learning_rate': {raw_emb_lr}))" 
     out_text_changed = out_text.replace("(","{").replace(")", "}").replace("'", "\"")
     print(out_text_changed)
 
-run_exp(test_vals[int(sys.argv[1])])
+# run_exp(test_vals[int(sys.argv[1])])
+run_exp(test_vals[0])

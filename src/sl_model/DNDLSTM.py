@@ -32,6 +32,7 @@ class DNDLSTM(nn.Module):
         self.device = device
         self.exp_settings = exp_settings
         self.unsure_bc_guess = torch.Tensor([0.0]).to(self.device)
+        self.barcode_id = torch.Tensor([-1]).to(self.device)
         self.N_GATES = 4
 
         # input-hidden weights
@@ -110,9 +111,9 @@ class DNDLSTM(nn.Module):
         c_t = torch.mul(f_t, c) + torch.mul(i_t, c_t_new)
 
         if self.exp_settings["mem_store"] == "L2RL":
-            sim_score = torch.tensor(0, device=self.device)
             m_t = torch.zeros_like(h, device=self.device)
             predicted_barcode = "0" * self.exp_settings["barcode_size"]
+
         else:
             if self.exp_settings["mem_store"] == "embedding":
                 # Freeze all LSTM Layers before getting memory
@@ -121,10 +122,10 @@ class DNDLSTM(nn.Module):
                     for name, param in layer.named_parameters():
                         param.requires_grad = False
 
-                if self.exp_settings['emb_loss'] == 'kmeans':
+                if self.exp_settings['emb_loss'] == 'kmeans' or self.exp_settings['emb_loss'] == 'contrastive':
                     if len(self.dnd.barcode_guesses) > 0:
                         barcode_sims = torch.nn.functional.cosine_similarity(obs_bar_reward, self.dnd.barcode_guesses)
-                        barcode_id = torch.argmax(barcode_sims).view(1)
+                        self.barcode_id = torch.argmax(barcode_sims).view(1)
                         self.unsure_bc_guess += max(barcode_sims)
 
                 mem, predicted_barcode, sim_score = self.dnd.get_memory(
@@ -175,7 +176,7 @@ class DNDLSTM(nn.Module):
 
         # fetch activity
         output = (a_t, predicted_barcode, prob_a_t, v_t, entropy, h_t, c_t)
-        cache = (f_t, i_t, o_t, r_t, m_t, sim_score)
+        cache = (f_t, i_t, o_t, r_t, m_t, self.barcode_id)
 
         return output, cache
 

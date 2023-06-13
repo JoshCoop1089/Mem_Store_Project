@@ -28,13 +28,11 @@ def expected_return(num_arms, perfect_info):
         random = 1 / num_arms
     return perfect, random
 
-
 # Adapted from https://learnopencv.com/t-sne-for-feature-visualization/
 def scale_to_01_range(x):
     value_range = np.max(x) - np.min(x)
     starts_from_zero = x - np.min(x)
     return starts_from_zero / value_range
-
 
 def hamming_distance(barcode1, barcode2):
     return sum(c1 != c2 for c1, c2 in zip(barcode1, barcode2))
@@ -68,7 +66,7 @@ def plot_tsne_distribution(
         # pca_n_component_finder(features)
         features = PCA(n_components=30).fit_transform(features)
 
-    tsne = TSNE(n_components=2).fit_transform(features)
+    tsne = TSNE(n_components=2, perplexity=50).fit_transform(features)
     tx = tsne[:, 0]
     ty = tsne[:, 1]
     tx = scale_to_01_range(tx)
@@ -167,7 +165,7 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
     frac = 0.1
     marker_list = ["dashdot", "solid", (0, (3, 1, 1)), (0,(2,1,2))]
     for idx_mem, mem_store in enumerate(mem_store_types):
-        if graph_type in ["Embedder Loss", 'Contrastive Loss'] and 'embedding' not in mem_store:
+        if graph_type in ["Embedder Loss", 'Contrastive Loss', 'Contrastive Pos Loss', 'Contrastive Neg Loss'] and 'embedding' not in mem_store:
             continue
         
         exp_name1 = "..\\Mem_Store_Project\\data\\" + exp_name + f"_{mem_store}"
@@ -214,9 +212,15 @@ def graph_with_lowess_smoothing(exp_base, exp_difficulty, graph_type, use_lowess
         elif graph_type == "Embedder Loss":
             data = np.load(exp_name1)["tot_emb_loss"][:exp_settings['epochs']]
 
-        # Embedder Loss
+        # Contrastive Loss
         elif graph_type == "Contrastive Loss" and 'embedding' in mem_store:
             data = np.load(exp_name1)["tot_cont_loss"][:exp_settings['epochs']]
+        # Contrastive Pos Loss
+        elif graph_type == "Contrastive Pos Loss" and 'embedding' in mem_store:
+            data = np.load(exp_name1)["tot_cont_pos_loss"][:exp_settings['epochs']]
+        # Contrastive Neg Loss
+        elif graph_type == "Contrastive Neg Loss" and 'embedding' in mem_store:
+            data = np.load(exp_name1)["tot_cont_neg_loss"][:exp_settings['epochs']]
 
         in_array = np.arange(len(data))
         lowess_data = lowess(data, in_array, frac=frac, return_sorted=False)
@@ -359,7 +363,7 @@ def graph_keys_single_run(exp_base, exp_difficulty, color_by):
         # Initial, 33%, 66%, 100% Training View
         train = [0, 5, 10, 15, 20, 25, 33, 66, 100]
 
-        f, axes = plt.subplots(3, 3, figsize=(12, 12))
+        f, axes = plt.subplots(3, 3, figsize=(12, 10))
         for idx_mem, memory in enumerate(all_keys[0:len(train)]):
 
             # Subplot Locations for 9 key splits
@@ -539,7 +543,7 @@ if __name__ == "__main__":
     noise_eval = False
     # exp_types = ['embedding']
     # exp_types = ['context', 'embedding_LSTM_groundtruth', 'L2RL']
-    exp_types = ['context', 'embedding_LSTM_kmeans', 'L2RL']
+    exp_types = ['context', 'embedding_LSTM_kmeans', 'embedding_LSTM_contrastive', 'L2RL']
     # exp_types = ['context', 'embedding_LSTM_contrastive', 'L2RL']
     # exp_types = ['embedding_LSTM_contrastive']
     # exp_types = ['embedding_LSTM_kmeans']
@@ -579,8 +583,9 @@ if __name__ == "__main__":
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Returns")
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Accuracy")
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Loss")
-        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Loss")
-        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "R-Gates")
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Loss")
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Pos Loss")
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Neg Loss")
 
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)

@@ -146,11 +146,6 @@ def vectorize_cos_sim(input1, input2, device, same=False):
         input2_normed = input2/norm2
         dot = input1_normed@input2_normed.t()
 
-    s = torch.ones_like(dot, device=device)
-    for i in range(input1.size()[0]):
-        for j in range(input1.size()[0]):
-            s[i][j] = norm1[i].item()*norm2[j].item()
-    x = torch.div(dot, s)
     return dot
 
 """https://github.com/galidor/PyTorchPartialLayerFreezing/blob/main/partial_freezing.py

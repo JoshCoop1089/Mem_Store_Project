@@ -204,7 +204,8 @@ def run_experiment_sl(exp_settings):
 
     # Data storage for K-Means Barcode guesses
     avg_inputs = np.zeros((episodes_per_epoch*pulls_per_episode, dim_input_lstm))
-   
+    pulls_per_epoch = episodes_per_epoch*pulls_per_episode
+
     big_ol_zero = torch.tensor(0, dtype=torch.float32, device = device)
     print("\n", "-*-_-*- " * 3, "\n")
     # with torch.autograd.set_detect_anomaly(True):
@@ -363,6 +364,9 @@ def run_experiment_sl(exp_settings):
                         (action, noisy_bc, reward.view(1, 1)), dim=1
                     )
 
+                # K-Means barcode Cluster ID by Mode across episode
+                bc_freq_dict = {}
+
                 # loop over time, for one training example
                 for t in range(pulls_per_episode):
 
@@ -406,7 +410,7 @@ def run_experiment_sl(exp_settings):
                     )
 
                     a_t, assumed_barcode_string, prob_a_t, v_t, entropy, h_t, c_t = output_t
-                    f_t, i_t, o_t, r_gate, m_t, sim_score = cache
+                    f_t, i_t, o_t, r_gate, m_t, k_means_barcode = cache
 
                     # compute immediate reward for actor network
                     r_t = get_reward_from_assumed_barcode(
@@ -423,8 +427,13 @@ def run_experiment_sl(exp_settings):
                     cumulative_reward += r_t
 
                     # Store inputs to id barcodes with k-means
-                    if i == 0 and exp_settings['emb_loss'] == 'kmeans':
-                        avg_inputs[m*pulls_per_episode + t] += input_to_lstm.view(-1).cpu().numpy()
+                    if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'contrastive':
+                        if i == 0:
+                            avg_inputs[m*pulls_per_episode + t] += input_to_lstm.view(-1).cpu().numpy()
+
+                        # Identify barcode by finding mode across k-means clusters for all pulls
+                        elif i > 0:
+                            bc_freq_dict[k_means_barcode.item()] = bc_freq_dict.get(k_means_barcode.item(),0)+1
 
                     # Inputs to LSTM come from predicted actions and rewards of last time step
                     one_hot_action = torch.zeros(
@@ -466,49 +475,63 @@ def run_experiment_sl(exp_settings):
                         # Embedder Loss for Episode
                         a_dnd = agent.dnd
                         
-                        if exp_settings['emb_loss'] == 'contrastive':
-                            # Check same/diff barcodes against previous episode
-                            # if exp_settings['emb_loss'] == 'groundtruth':
-                            #     cur_episode_id = cross_ent_loss_tensor
-                            # elif exp_settings['emb_loss'] == 'kmeans' and i > 0:
-                            barcode_sims = torch.nn.functional.cosine_similarity(input_to_lstm, a_dnd.barcode_guesses)
-                            cur_episode_id = torch.argmax(barcode_sims).view(1)
-                            # else:
-                            #     cur_episode_id = big_ol_zero
+                        # if exp_settings['emb_loss'] == 'contrastive':
+                        # Check same/diff barcodes against previous episode
+                        if exp_settings['emb_loss'] == 'groundtruth':
+                            cur_episode_id = cross_ent_loss_tensor
+                        elif ( i>0 and (exp_settings['emb_loss'] == 'kmeans' or
+                                        exp_settings['emb_loss'] == 'contrastive')):
+                            cur_episode_id = torch.tensor(max(bc_freq_dict, key = bc_freq_dict.get), device = device)
 
-                            embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
-                            embA_stack = torch.stack(embA)
-                            x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
+                            # try:
+                            #     # Is the cur_episode_id identifying the correct BC_ID?
+                            #     real_bc_id = barcode_id[m].item()
+                            #     k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
+                            #     log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
+                            # except Exception as e:
+                            #     pass
+                        else:
+                            cur_episode_id = big_ol_zero
 
-                            # Avoid doublecounting positive pairs
-                            x_dist = (torch.square(x))/2
+                        embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
+                        embA_stack = torch.stack(embA)
+                        x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
 
-                            pos_output = torch.sum(x_dist)
-                            neg_output = torch.tensor(0, device = device)
-                            if m > 0:
-                                negs = vectorize_cos_sim(
-                                    embA_stack, embB_stack, device, same = False)
-                                
-                                # Remove Negatives
-                                if torch.ne(cur_episode_id, prev_episode_id):
-                                    negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
+                        # Avoid doublecounting positive pairs
+                        # Why doesn't this version work to reduce loss?
+                        # x_dist = (torch.ones_like(x, device = device) - torch.square(x))/2
+                        x_dist = (torch.square(x))/2
 
-                                neg_output = torch.sum(torch.square(negs))
-                                
-                            embB_stack = embA_stack.detach().clone()
-                            prev_episode_id = cur_episode_id
-
-                            # Finding avg loss over the x pulls of an episode
-                            scale_factor = 1.5*pulls_per_episode
+                        pos_output = torch.sum(x_dist)
+                        neg_output = torch.tensor(0, device = device)
+                        if m > 0:
+                            negs = vectorize_cos_sim(
+                                embA_stack, embB_stack, device, same = False)
                             
-                            episode_loss = torch.div((pos_output+neg_output), scale_factor).detach().clone().requires_grad_(True)
-                            a_dnd.contrastive_loss[i] += torch.div(episode_loss, episodes_per_epoch)
+                            # If episode bc is diff from last episode, filter out any negative cos from loss
+                            if i == 0 or torch.ne(cur_episode_id, prev_episode_id).item():
+                                negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
+                                neg_output = torch.sum(torch.square(negs))
+                            else:
+                                # pos_output += torch.sum(torch.ones_like(negs, device = device) - torch.square(negs))
+                                pos_output += torch.sum(torch.square(negs))
+                            
+                        embB_stack = embA_stack.detach().clone()
+                        prev_episode_id = cur_episode_id
+
+                        # Finding avg loss over the x pulls of an episode
+                        scale_factor = 1.5*pulls_per_episode
+                        
+                        episode_loss = torch.div((pos_output+neg_output), scale_factor).detach().clone().requires_grad_(True)
+                        a_dnd.contrastive_loss[i] += episode_loss
+                        a_dnd.contrastive_pos_loss[i] += pos_output
+                        a_dnd.contrastive_neg_loss[i] += neg_output
 
                         if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'groundtruth':
                             loss_vals = [x[2] for x in a_dnd.trial_buffer]
                             episode_loss = torch.stack(loss_vals).sum()
                             
-                        a_dnd.embedder_loss[i] += torch.div(episode_loss, episodes_per_epoch)
+                        a_dnd.embedder_loss[i] += episode_loss
 
                         # Unfreeze Embedder
                         for name, param in a_dnd.embedder.named_parameters():
@@ -551,19 +574,80 @@ def run_experiment_sl(exp_settings):
                 )
 
                 # Updating avg accuracy per episode
-                log_bc_guess_accuracy[i] += torch.div(agent.unsure_bc_guess, (episodes_per_epoch*pulls_per_episode))
-                log_embedder_accuracy[i] += torch.div(agent.dnd.pred_accuracy, (episodes_per_epoch*pulls_per_episode))
-                log_memory_accuracy[i] += torch.div(memory_accuracy, (episodes_per_epoch*pulls_per_episode))
+                # log_bc_guess_accuracy[i] += agent.unsure_bc_guess
+                log_embedder_accuracy[i] += agent.dnd.pred_accuracy
+                log_memory_accuracy[i] += memory_accuracy
 
                 # Loss Logging
-                log_loss_value[i] += torch.div(loss_value, episodes_per_epoch)
-                log_loss_policy[i] += torch.div(loss_policy, episodes_per_epoch)
-                log_loss_total[i] += torch.div(loss, episodes_per_epoch)
+                log_loss_value[i] += loss_value
+                log_loss_policy[i] += loss_policy
+                log_loss_total[i] += loss
 
-            if i == 0 and exp_settings['emb_loss'] == 'kmeans':
-                km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 10, max_iter = 300)
-                y_km = km.fit_predict(avg_inputs)
-                agent.dnd.barcode_guesses = torch.as_tensor(km.cluster_centers_, device = device)
+            if i == 0 and (exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'contrastive'):
+                k_means_reset = True
+                count = 0
+                while k_means_reset and count < 100:
+                    k_means_reset = False
+                    km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 40, max_iter = 600)
+                    y_km = km.fit_predict(avg_inputs)
+                    agent.dnd.barcode_guesses = torch.as_tensor(km.cluster_centers_, device = device)
+
+                    """
+                    # Maps BC_ID -> K_Means Cluster
+                    pred_bc_cluster = {k:[] for k in range(num_barcodes)}
+
+                    # Figure out how the original barcode id's match to the clusters
+                    for idx, input_vals in enumerate(avg_inputs):
+                        bc_id = barcode_id[idx//10].item()
+                        barcode_sims = torch.nn.functional.cosine_similarity(torch.tensor(input_vals,device=device), agent.dnd.barcode_guesses)
+                        k_means_id = torch.argmax(barcode_sims)
+                        pred_bc_cluster[bc_id].append(k_means_id.item())
+
+                    # Get number of occurences of BC-ID to K-Means ID
+                    pred_sort_bc = {}
+                    for k, v in pred_bc_cluster.items():
+                        temp = {}
+                        for elem in v:
+                            temp[elem] = temp.get(elem, 0)+1
+                        pred_sort_bc[k] = temp
+
+                    max_pred_bc = {}
+                    # If any BC_ID has a singular k-means ID, remove K-means_cluster ID from all other options
+                    for k,v in pred_sort_bc.items():
+                        if len(v) == 1:
+                            for k_means, percent in v.items():
+                                max_pred_bc[k] = k_means
+                                for k1,v1 in pred_sort_bc.items():
+                                    if k_means in v1.keys():
+                                        v1.pop(k_means)
+                                break
+
+                    # Check for high percent matches in other bc_ids
+                    # print(pred_sort_bc)
+                    for k,v in pred_sort_bc.items():
+                        # print(pred_sort_bc)
+                        for k_means, percent in v.items():
+                            if percent >= 70:
+                                max_pred_bc[k] = k_means
+                                for k1,v1 in pred_sort_bc.items():
+                                    if k_means in v1.keys():
+                                        v1.pop(k_means)
+                                break
+
+                    # If there are any bc_id's left over, it means a cluster wasn't identified for that BC, re-run k-means clustering
+                    # print(max_pred_bc)
+                    bc_found = max_pred_bc.keys()
+                    bc_left = [x for x in range(num_barcodes) if x not in bc_found]
+                    k_bc_found = max_pred_bc.values()
+                    k_bc_left = [x for x in range(num_barcodes) if x not in k_bc_found]
+                    print(bc_left, k_bc_left)
+
+                    k_means_to_bc = {k:v for k,v in zip(k_bc_found, bc_found)}
+
+                    if len(bc_left):
+                        count += 1
+                        k_means_reset = True
+                    """
 
             # Tensorboard Stuff
             if exp_settings["tensorboard_logging"]:
@@ -586,8 +670,8 @@ def run_experiment_sl(exp_settings):
                         % (
                             i,
                             log_return[i],
-                            log_loss_total[i],
-                            agent.dnd.embedder_loss[i],
+                            log_loss_total[i]/episodes_per_epoch,
+                            agent.dnd.embedder_loss[i]/episodes_per_epoch,
                             run_time[i],
                         )
                     )
@@ -597,29 +681,29 @@ def run_experiment_sl(exp_settings):
                         % (
                             i,
                             log_return[i],
-                            log_loss_value[i],
-                            log_loss_policy[i],
-                            log_loss_total[i],
+                            log_loss_value[i]/episodes_per_epoch,
+                            log_loss_policy[i]/episodes_per_epoch,
+                            log_loss_total[i]/episodes_per_epoch,
                             run_time[i],
                         )
                     )
                 # Accuracy over the last 10 epochs
                 if i > 11:
-                    avg_acc = log_memory_accuracy[i - 9 : i + 1].mean()
-                    avg_emb_acc = log_embedder_accuracy[i - 9 : i + 1].mean()
-                    avg_bc_acc = log_bc_guess_accuracy[i - 9 : i + 1].mean()
+                    avg_acc = log_memory_accuracy[i - 9 : i + 1].mean()/pulls_per_epoch
+                    avg_emb_acc = log_embedder_accuracy[i - 9 : i + 1].mean()/pulls_per_epoch
+                    avg_bc_acc = log_bc_guess_accuracy[i - 9 : i + 1].mean()/episodes_per_epoch
                 else:
-                    avg_acc = log_memory_accuracy[: i + 1].mean()
-                    avg_emb_acc = log_embedder_accuracy[: i + 1].mean()
+                    avg_acc = log_memory_accuracy[: i + 1].mean()/pulls_per_epoch
+                    avg_emb_acc = log_embedder_accuracy[: i + 1].mean()/pulls_per_epoch
                     if i == 0:
                         avg_bc_acc = 0
                     else:
-                        avg_bc_acc = log_bc_guess_accuracy[1: i + 1].mean()
+                        avg_bc_acc = log_bc_guess_accuracy[1: i + 1].mean()/episodes_per_epoch
                     
                 print("  Mem Acc:", round(avg_acc, 4), end=" | ")
                 if exp_settings['mem_store'] == 'embedding':
-                    print("Model Acc:", round(avg_emb_acc, 4), end=" | ")
                     if exp_settings['emb_loss'] == 'kmeans':
+                        print("Model Acc:", round(avg_emb_acc, 4), end=" | ")
                         print("BC Acc:", round(avg_bc_acc, 4), end=" | ")
                 print(f"Time Elapsed: {round(sum(run_time), 1)} secs")
 
@@ -636,6 +720,22 @@ def run_experiment_sl(exp_settings):
         
         # Save clusters of barcodes
         np.savez(f"model/{exp_settings['exp_name']}.npz", cluster_lists = task.cluster_lists)
+    
+    # Updating avg accuracy per episode
+    log_bc_guess_accuracy /= pulls_per_epoch
+    log_embedder_accuracy /= pulls_per_epoch
+    log_memory_accuracy /= pulls_per_epoch
+
+    # Scale Loss Logs for graphing
+    agent.dnd.contrastive_loss /= episodes_per_epoch
+    agent.dnd.contrastive_pos_loss /= episodes_per_epoch
+    agent.dnd.contrastive_neg_loss /= episodes_per_epoch
+    agent.dnd.embedder_loss /= episodes_per_epoch
+
+    # A2C Loss
+    log_loss_value /= episodes_per_epoch
+    log_loss_policy /= episodes_per_epoch
+    log_loss_total /= episodes_per_epoch
 
     # Final Results printed to Console
     start = exp_settings["epochs"]
@@ -668,9 +768,9 @@ def run_experiment_sl(exp_settings):
         "secs",
     )
     print("- - - " * 3)
-
+    contrastive_losses = (agent.dnd.contrastive_loss, agent.dnd.contrastive_pos_loss, agent.dnd.contrastive_neg_loss)
     logs_for_graphs = log_return, log_memory_accuracy, log_embedder_accuracy
-    loss_logs = log_loss_value, log_loss_policy, log_loss_total, agent.dnd.embedder_loss, agent.dnd.contrastive_loss
+    loss_logs = log_loss_value, log_loss_policy, log_loss_total, agent.dnd.embedder_loss, contrastive_losses
     key_data = log_keys, epoch_mapping
 
     if exp_settings["tensorboard_logging"]:

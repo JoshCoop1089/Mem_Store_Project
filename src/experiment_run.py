@@ -17,17 +17,17 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 #context, embedding, L2RL
 
 # exp_types = ['context', 'embedding']
-exp_types = ['context', 'embedding', 'L2RL']
+# exp_types = ['context', 'embedding', 'L2RL']
 # exp_types = ['context']
-# exp_types = ['embedding']
+exp_types = ['embedding']
 
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
 
-training_epochs = 1000
-noise_epochs = 40
+training_epochs = 10
+noise_epochs = 4
 
 noise_train_percent = 0.2
 noise_train_type = 'right_mask'
@@ -79,17 +79,18 @@ for noise_type in noise_types:
     exp_difficulty = exp_diff_general + exp_diff_specifics
     run_experiment(exp_base, exp_difficulty)
 
-# After training K-Means, load in weights and train Contrastive
-switch_to_contrastive = True
-emb_loss = 'contrastive'
-exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrastive]
-training_epochs = 1000
-noise_epochs = 40
+if 'embedding' in exp_type:
+    # After training K-Means, load in weights and train Contrastive
+    switch_to_contrastive = True
+    emb_loss = 'contrastive'
+    exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrastive]
+    training_epochs = 1000
+    noise_epochs = 40
 
-for noise_type in noise_types:
-    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = exp_diff_general + exp_diff_specifics
-    run_experiment(exp_base, exp_difficulty)
+    for noise_type in noise_types:
+        exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+        exp_difficulty = exp_diff_general + exp_diff_specifics
+        run_experiment(exp_base, exp_difficulty)
  
 # Eval Model on different noise types
 training_epochs = 0
@@ -109,13 +110,13 @@ noise_types = [
     # "checkerboard",
     ]
 
-for noise_type in noise_types:
-    if 'embedding' in exp_types and "no_mem" in noise_type:
-        noise_type = noise_type[:-7]
-        emb_with_mem = False
+# for noise_type in noise_types:
+#     if 'embedding' in exp_types and "no_mem" in noise_type:
+#         noise_type = noise_type[:-7]
+#         emb_with_mem = False
         
-    exp_diff_specifics = [noise_percent, emb_loss,
-                          emb_with_mem, switch_to_contrastive]
-    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = exp_diff_general + exp_diff_specifics
-    run_experiment(exp_base, exp_difficulty)
+#     exp_diff_specifics = [noise_percent, emb_loss,
+#                           emb_with_mem, switch_to_contrastive]
+#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#     exp_difficulty = exp_diff_general + exp_diff_specifics
+#     run_experiment(exp_base, exp_difficulty)
