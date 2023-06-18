@@ -36,16 +36,17 @@ def avg_returns(
     exp_settings['mem_mode'] = "LSTM"
     # exp_settings['mem_mode'] = "one_layer"
 
-    # exp_settings['emb_loss'] = 'contrastive'
-    exp_settings['emb_loss'] = 'kmeans'
+    exp_settings['emb_loss'] = 'contrastive'
+    # exp_settings['emb_loss'] = 'kmeans'
 
     exp_settings['emb_with_mem'] = True
+    exp_settings['switch_to_contrastive'] = True
 
     # Task Complexity
-    exp_settings["num_arms"] = 5
+    exp_settings["num_arms"] = 10
     exp_settings["num_barcodes"] = 10
     exp_settings["barcode_size"] = 20
-    exp_settings["epochs"] = 600
+    exp_settings["epochs"] = 1000
     exp_settings["noise_eval_epochs"] = 30
     exp_settings['dropout_coef'] = 0
 
@@ -71,8 +72,6 @@ def avg_returns(
     # exp_settings["value_error_coef"] = value_error_coef
     # exp_settings['entropy_error_coef'] = entropy_error_coef
     exp_settings['embedder_learning_rate'] = 10**embedding_learning_rate
-    exp_settings['embedder_learning_rate_second_phase'] = 10**embedding_learning_rate_cont
-    exp_settings['embedding_size'] = int(2**embedding_size)
     # exp_settings['dropout_coef'] = dropout_coef
     # End HyperParam Searches for BayesOpt#
 
@@ -90,6 +89,14 @@ def avg_returns(
     # exp_settings['lstm_learning_rate'] = 10**-3.0818
     # exp_settings['value_error_coef'] = .8046
     # exp_settings["entropy_error_coef"] = 0.0446
+
+    # # 10a10b20s 1000 epoch noise init 20 percent right mask
+    exp_settings['dim_hidden_a2c'] = int(2**8.11)
+    exp_settings['dim_hidden_lstm'] = int(2**8.11)
+    exp_settings['lstm_learning_rate'] = 10**-3.0788
+    exp_settings['value_error_coef'] = 0.4495
+    exp_settings["entropy_error_coef"] = 0.00
+    exp_settings['embedding_size'] = int(2**7.27899)
 
     # # 10a20b40s 3000 epoch noise init 25 percent right mask
     # exp_settings['dim_hidden_a2c'] = int(2**5.514)

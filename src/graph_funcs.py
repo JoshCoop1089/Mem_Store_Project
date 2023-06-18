@@ -535,15 +535,16 @@ if __name__ == "__main__":
     # stats = [5,10,20, 0.2]
     # stats = [8, 16, 40, 0.2]
     # stats = [5, 5, 10, 0.2]
-    # stats = [10,10,10, 0.0]
-    stats = [10,10,20, 0.2]
+    stats = [10,10,10, 0.0]
+    # stats = [10,10,20, 0.2]
 
 
     # noise_eval = True
     noise_eval = False
     # exp_types = ['embedding']
     # exp_types = ['context', 'embedding_LSTM_groundtruth', 'L2RL']
-    exp_types = ['context', 'embedding_LSTM_kmeans', 'embedding_LSTM_contrastive', 'L2RL']
+    # exp_types = ['context', 'embedding_LSTM_kmeans', 'embedding_LSTM_contrastive', 'L2RL']
+    exp_types = ['context', 'embedding_LSTM_kmeans', 'L2RL']
     # exp_types = ['context', 'embedding_LSTM_contrastive', 'L2RL']
     # exp_types = ['embedding_LSTM_contrastive']
     # exp_types = ['embedding_LSTM_kmeans']
@@ -580,20 +581,20 @@ if __name__ == "__main__":
             barcode_size,
             noise_train_percent,
         )
-        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Returns")
-        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Accuracy")
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Returns")
+        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Accuracy")
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Loss")
-        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Loss")
-        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Pos Loss")
-        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Neg Loss")
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Loss")
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Pos Loss")
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Neg Loss")
 
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
         # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)
 
         # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'arms')
-        for mem_type in exp_types:
-            exp_base = mem_type, noise_type, figure_save_location, noise_eval
-            graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
+        # for mem_type in exp_types:
+        #     exp_base = mem_type, noise_type, figure_save_location, noise_eval
+        #     graph_keys_single_run(exp_base, exp_difficulty, color_by = 'arms')
 
         # exp_base = exp_types, noise_type, figure_save_location
         # graph_keys_multiple_memory_types(exp_base, exp_difficulty, color_by = 'cluster')

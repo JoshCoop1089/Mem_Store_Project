@@ -16,6 +16,9 @@ class Embedder(nn.Module):
         self.dropout_coef = exp_settings["dropout_coef"]
 
         self.mem_mode = exp_settings["mem_mode"]
+        self.emb_loss = exp_settings['emb_loss']
+        self.contrastive_switch = exp_settings['switch_to_contrastive']
+        self.use_lstm3 = False
 
         self.big_ol_zero = torch.tensor([0.0], device = self.device, requires_grad=False)
 
@@ -41,6 +44,15 @@ class Embedder(nn.Module):
                 self.embedding_size, self.embedding_size//2, bias=bias, device=device
             )
 
+            # LSTM3 Core (Contrastive Loss Post K-Means Loss)
+            self.LSTM3 = nn.LSTM(input_size = self.embedding_size//2, hidden_size = self.embedding_size//4, device = self.device)
+            self.h_lstm3, self.c_lstm3 = self.emb_get_init_states(self.embedding_size//4)
+            self.l32i = nn.Linear(
+                self.embedding_size//4, self.embedding_size//4, bias=bias, device=device
+            )
+            if self.emb_loss == 'contrastive' and self.contrastive_switch:
+                self.use_lstm3 = True
+
         # init
         self.reset_parameter()
 
@@ -58,9 +70,18 @@ class Embedder(nn.Module):
             x = nn.Dropout(self.dropout_coef)(x)
             x = self.m2c(F.leaky_relu(x))
         elif self.mem_mode == 'LSTM':
+            # K-Means -> Cross Entropy Trained LSTM
             x, (h1,c1)  = self.LSTM(h, (self.h_lstm,self.c_lstm))
             self.h_lstm, self.c_lstm = h1,c1
             x = self.l2i(F.leaky_relu(x))
+
+            # Contrastive Loss Trained LSTM
+            if self.use_lstm3:
+                x = F.leaky_relu(x)
+                x, (h3,c3)  = self.LSTM(x, (self.h_lstm3,self.c_lstm3))
+                self.h_lstm3, self.c_lstm3 = h3,c3
+                x = self.l32i(F.leaky_relu(x))
+
         else:
             raise ValueError("Incorrect mem_mode spelling")
         

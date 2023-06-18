@@ -19,6 +19,11 @@ from sl_model.utils import (
 from task.ContextBandits import ContextualBandit
 from sklearn.cluster import KMeans
 
+
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 def barcodes_are_different(barcode_strings):
     percent_diff = 0.0
     x = barcode_strings
@@ -203,8 +208,8 @@ def run_experiment_sl(exp_settings):
         key_save_epochs = train_epochs + noise_epochs
 
     # Data storage for K-Means Barcode guesses
-    avg_inputs = np.zeros((episodes_per_epoch*pulls_per_episode, dim_input_lstm))
     pulls_per_epoch = episodes_per_epoch*pulls_per_episode
+    avg_inputs = np.zeros((pulls_per_epoch, dim_input_lstm))
 
     big_ol_zero = torch.tensor(0, dtype=torch.float32, device = device)
     print("\n", "-*-_-*- " * 3, "\n")
@@ -261,6 +266,10 @@ def run_experiment_sl(exp_settings):
                     if exp_settings['mem_mode'] == "LSTM":
                         emb_model.h_lstm, emb_model.c_lstm = emb_model.emb_get_init_states(
                             exp_settings['embedding_size'])
+                        if exp_settings['emb_loss'] == 'contrastive' and exp_settings['switch_to_contrastive']:
+                            emb_model.h_lstm3, emb_model.c_lstm3 = emb_model.emb_get_init_states(
+                                exp_settings['embedding_size'])
+
 
                 # Always use ground truth bc for reward eval
                 real_bc = barcode_strings[m][0][0]
@@ -428,10 +437,11 @@ def run_experiment_sl(exp_settings):
 
                     # Store inputs to id barcodes with k-means
                     if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'contrastive':
+                        # Creating initial k-means clusters of first epoch inputs
                         if i == 0:
                             avg_inputs[m*pulls_per_episode + t] += input_to_lstm.view(-1).cpu().numpy()
 
-                        # Identify barcode by finding mode across k-means clusters for all pulls
+                        # Identify barcode at end of episode by finding mode across k-means clusters for all pulls
                         elif i > 0:
                             bc_freq_dict[k_means_barcode.item()] = bc_freq_dict.get(k_means_barcode.item(),0)+1
 
@@ -483,13 +493,14 @@ def run_experiment_sl(exp_settings):
                                         exp_settings['emb_loss'] == 'contrastive')):
                             cur_episode_id = torch.tensor(max(bc_freq_dict, key = bc_freq_dict.get), device = device)
 
-                            # try:
-                            #     # Is the cur_episode_id identifying the correct BC_ID?
-                            #     real_bc_id = barcode_id[m].item()
-                            #     k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
-                            #     log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
-                            # except Exception as e:
-                            #     pass
+                            # This is only enabled when clusters are forced to be mapped to real bc's in a supervised manner
+                            try:
+                                # Is the cur_episode_id identifying the correct BC_ID?
+                                real_bc_id = barcode_id[m].item()
+                                k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
+                                log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
+                            except Exception as e:
+                                pass
                         else:
                             cur_episode_id = big_ol_zero
 
@@ -543,6 +554,26 @@ def run_experiment_sl(exp_settings):
 
                         # Freeze LSTM/A2C
                         layers = [agent.i2h, agent.h2h, agent.a2c]
+
+                        # Freeze whichever Embedder LSTM is not being used
+                        kmeans_layers = [agent.dnd.embedder.LSTM, agent.dnd.embedder.l2i]
+                        contrastive_layers = [agent.dnd.embedder.LSTM3, agent.dnd.embedder.l32i]
+
+                        # Unfreeze Contrastive LSTM
+                        if exp_settings['emb_loss'] == 'contrastive' and exp_settings['switch_to_contrastive']:
+                            layers.extend(kmeans_layers)
+                            for layer in contrastive_layers:
+                                for name, param in layer.named_parameters():
+                                    param.requires_grad = True
+
+                        # Unfreeze K_Means LSTM
+                        if exp_settings['emb_loss'] == 'groundtruth' or exp_settings['emb_loss'] == 'kmeans':
+                            layers.extend(contrastive_layers)
+                            for layer in kmeans_layers:
+                                for name, param in layer.named_parameters():
+                                    param.requires_grad = True
+
+                        # Freezing LSTM/A2C and unused Embedder LSTM
                         for layer in layers:
                             for name, param in layer.named_parameters():
                                 param.requires_grad = False
@@ -569,9 +600,7 @@ def run_experiment_sl(exp_settings):
                     optimizer.zero_grad()
                         
                 # Updating avg return per episode
-                log_return[i] += torch.div(
-                    cumulative_reward, (episodes_per_epoch * pulls_per_episode)
-                )
+                log_return[i] += cumulative_reward
 
                 # Updating avg accuracy per episode
                 # log_bc_guess_accuracy[i] += agent.unsure_bc_guess
@@ -588,16 +617,121 @@ def run_experiment_sl(exp_settings):
                 count = 0
                 while k_means_reset and count < 100:
                     k_means_reset = False
-                    km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 40, max_iter = 600)
-                    y_km = km.fit_predict(avg_inputs)
-                    agent.dnd.barcode_guesses = torch.as_tensor(km.cluster_centers_, device = device)
 
-                    """
+                    from sklearn.metrics import silhouette_score
+                    def pca_n_component_finder(data_std):
+                        pca = PCA(n_components=None)
+                        pca.fit(data_std)
+
+                        exp_var = pca.explained_variance_ratio_ * 100
+                        cum_exp_var = np.cumsum(exp_var)
+
+                        plt.bar(range(1, data_std.shape[1]+1), exp_var, align='center',
+                                label='Individual explained variance')
+
+                        plt.step(range(1, data_std.shape[1]+1), cum_exp_var, where='mid',
+                                label='Cumulative explained variance', color='red')
+
+                        plt.ylabel('Explained variance percentage')
+                        plt.xlabel('Principal component index')
+                        plt.xticks(ticks=[x for x in range(data_std.shape[1]+1)])
+                        plt.legend(loc='best')
+                        plt.tight_layout()
+                        plt.show()
+
+                    # pca_n_component_finder(avg_inputs)
+                    pca = PCA(n_components=19)
+                    df = pca.fit_transform(avg_inputs)
+                    km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 100, max_iter = 100)
+                    y_km = km.fit_predict(df)
+                    print("PCA - Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+                    km = KMeans(n_clusters = num_barcodes, init = 'k-means++', n_init= 100, max_iter = 100)
+                    y_km = km.fit_predict(df)
+                    print("PCA - KMeans | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+
+                    # Farthest Point Centroids
+                    def far_centroids_chosen(data, n = 10):
+                        centroids = []
+                        count = 0
+                        first_cent = np.random.choice(len(data))
+                        centroids.append(data[first_cent])
+                        # data = np.delete(data2, first_cent, 0)
+                        while len(centroids) < n:
+                            count += 1
+                            dist = np.zeros(len(data))
+                            min_dist = np.zeros_like(centroids)
+                            for c_idx, centroid in enumerate(centroids):
+                                for idx, point in enumerate(data):
+                                    dist[idx] = np.linalg.norm(centroid-point)
+                                min_id = np.argmin(dist)
+                                min_dist[c_idx]= data[min_id]
+                            next_centroid_id = np.argmax(min_dist)
+                            centroids.append(data[next_centroid_id])
+                            # data = np.delete(data, next_centroid_id, 0)
+                        return np.asarray(centroids)
+                    
+                    center_groups = []
+                    scores = []
+                    for _ in range(100):
+                        centers = far_centroids_chosen(avg_inputs, 10)
+                        km = KMeans(n_clusters = num_barcodes, init = centers, n_init = 1, max_iter = 100)
+                        y_km = km.fit_predict(avg_inputs)
+                        scores.append(silhouette_score(avg_inputs, km.labels_))
+                        center_groups.append(centers)
+
+                    center = center_groups[np.argmax(scores)]
+                    km = KMeans(n_clusters = num_barcodes, init = centers, n_init=1, max_iter = 100)
+                    y_km = km.fit_predict(avg_inputs)
+                    print("Far-Init | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+
+                    # Random Centroids
+                    km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 100, max_iter = 100)
+                    y_km = km.fit_predict(avg_inputs)
+                    print("Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+                    
+                    # K_Means++ centroids
+                    km = KMeans(n_clusters = num_barcodes, init = 'k-means++', n_init= 100, max_iter = 100)
+                    y_km = km.fit_predict(avg_inputs)
+                    print("KMeans | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+
+                    # agent.dnd.barcode_guesses = torch.as_tensor(km.cluster_centers_, device = device)
+                    # # Plot clusters after PCA down to 2
+
+
+                    # # print(df)
+                    # # print(y_km)
+
+
+                    # #Getting unique labels
+                    
+                    # u_labels = np.unique(y_km)
+                    
+                    # #plotting the results:
+                    # fig = plt.figure()
+                    # ax = fig.add_subplot(projection='3d')
+
+                    # for i in u_labels:
+                    #     ax.scatter(df[y_km == i , 0] , df[y_km == i , 1], df[y_km == i , 2],  label = i)
+                    # ax.scatter(km.cluster_centers_[:, 0],
+                    #             km.cluster_centers_[:, 1],
+                    #             km.cluster_centers_[:, 2],
+                    #             s=80, color='k')
+
+                    # plt.show()
+
+                    agent.dnd.barcode_guesses = torch.as_tensor(km.cluster_centers_, device = device)
+                    
+                    # This will attempt to produce clusters which can be directly mapped to real BC's
+                    # Not unsupervised, will be removed when needing to publish code
+                    # Interesting to see what percent the unsup k-means training is producing correct labels
+                    # Current runs in 10a10b20s give it ~90% labelling accuracy
+
                     # Maps BC_ID -> K_Means Cluster
                     pred_bc_cluster = {k:[] for k in range(num_barcodes)}
 
                     # Figure out how the original barcode id's match to the clusters
                     for idx, input_vals in enumerate(avg_inputs):
+                    # for idx, input_vals in enumerate(df):
                         bc_id = barcode_id[idx//10].item()
                         barcode_sims = torch.nn.functional.cosine_similarity(torch.tensor(input_vals,device=device), agent.dnd.barcode_guesses)
                         k_means_id = torch.argmax(barcode_sims)
@@ -611,25 +745,31 @@ def run_experiment_sl(exp_settings):
                             temp[elem] = temp.get(elem, 0)+1
                         pred_sort_bc[k] = temp
 
+                    # Sort the dicts for human readability
+                    pred2 = {}
+                    for k,v in pred_sort_bc.items():
+                        temp = sorted(v, key = v.get, reverse = True)
+                        pred2[k] = {x:v[x] for x in temp}
+
                     max_pred_bc = {}
                     # If any BC_ID has a singular k-means ID, remove K-means_cluster ID from all other options
-                    for k,v in pred_sort_bc.items():
+                    for k,v in pred2.items():
                         if len(v) == 1:
                             for k_means, percent in v.items():
                                 max_pred_bc[k] = k_means
-                                for k1,v1 in pred_sort_bc.items():
+                                for k1,v1 in pred2.items():
                                     if k_means in v1.keys():
                                         v1.pop(k_means)
                                 break
 
                     # Check for high percent matches in other bc_ids
-                    # print(pred_sort_bc)
-                    for k,v in pred_sort_bc.items():
-                        # print(pred_sort_bc)
+                    print(pred2)
+                    for k,v in pred2.items():
+                        # print(pred2)
                         for k_means, percent in v.items():
-                            if percent >= 70:
+                            if percent >= 60:
                                 max_pred_bc[k] = k_means
-                                for k1,v1 in pred_sort_bc.items():
+                                for k1,v1 in pred2.items():
                                     if k_means in v1.keys():
                                         v1.pop(k_means)
                                 break
@@ -647,7 +787,7 @@ def run_experiment_sl(exp_settings):
                     if len(bc_left):
                         count += 1
                         k_means_reset = True
-                    """
+                    
 
             # Tensorboard Stuff
             if exp_settings["tensorboard_logging"]:
@@ -669,7 +809,7 @@ def run_experiment_sl(exp_settings):
                         "Epoch %3d | avg_return = %.2f | loss: LSTM = %.2f, Embedder = %.2f | time = %.2f"
                         % (
                             i,
-                            log_return[i],
+                            log_return[i]/pulls_per_epoch,
                             log_loss_total[i]/episodes_per_epoch,
                             agent.dnd.embedder_loss[i]/episodes_per_epoch,
                             run_time[i],
@@ -680,7 +820,7 @@ def run_experiment_sl(exp_settings):
                         "Epoch %3d | avg_return = %.2f | loss: val = %.2f, pol = %.2f, tot = %.2f | time = %.2f"
                         % (
                             i,
-                            log_return[i],
+                            log_return[i]/pulls_per_epoch,
                             log_loss_value[i]/episodes_per_epoch,
                             log_loss_policy[i]/episodes_per_epoch,
                             log_loss_total[i]/episodes_per_epoch,
@@ -721,6 +861,8 @@ def run_experiment_sl(exp_settings):
         # Save clusters of barcodes
         np.savez(f"model/{exp_settings['exp_name']}.npz", cluster_lists = task.cluster_lists)
     
+    log_return /= pulls_per_epoch
+
     # Updating avg accuracy per episode
     log_bc_guess_accuracy /= pulls_per_epoch
     log_embedder_accuracy /= pulls_per_epoch

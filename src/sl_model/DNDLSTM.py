@@ -118,6 +118,15 @@ class DNDLSTM(nn.Module):
             if self.exp_settings["mem_store"] == "embedding":
                 # Freeze all LSTM Layers before getting memory
                 layers = [self.i2h, self.h2h, self.a2c]
+
+                # Freeze K-Means Embedder for Contrastive eval
+                if self.exp_settings['emb_loss'] == 'contrastive' and self.exp_settings['switch_to_contrastive']:
+                    layers.extend([self.dnd.embedder.LSTM, self.dnd.embedder.l2i])
+
+                # Freeze LSTM3 Contrastive when not in use
+                if self.exp_settings['emb_loss'] == 'groundtruth' or self.exp_settings['emb_loss'] == 'kmeans':
+                    layers.extend([self.dnd.embedder.LSTM3, self.dnd.embedder.l32i])
+
                 for layer in layers:
                     for name, param in layer.named_parameters():
                         param.requires_grad = False
