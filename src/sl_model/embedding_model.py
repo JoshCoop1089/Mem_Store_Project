@@ -78,7 +78,7 @@ class Embedder(nn.Module):
             # Contrastive Loss Trained LSTM
             if self.use_lstm3:
                 x = F.leaky_relu(x)
-                x, (h3,c3)  = self.LSTM(x, (self.h_lstm3,self.c_lstm3))
+                x, (h3,c3)  = self.LSTM3(x, (self.h_lstm3,self.c_lstm3))
                 self.h_lstm3, self.c_lstm3 = h3,c3
                 x = self.l32i(F.leaky_relu(x))
 

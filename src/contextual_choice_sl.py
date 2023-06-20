@@ -268,7 +268,7 @@ def run_experiment_sl(exp_settings):
                             exp_settings['embedding_size'])
                         if exp_settings['emb_loss'] == 'contrastive' and exp_settings['switch_to_contrastive']:
                             emb_model.h_lstm3, emb_model.c_lstm3 = emb_model.emb_get_init_states(
-                                exp_settings['embedding_size'])
+                                exp_settings['embedding_size']//4)
 
 
                 # Always use ground truth bc for reward eval
@@ -493,20 +493,25 @@ def run_experiment_sl(exp_settings):
                                         exp_settings['emb_loss'] == 'contrastive')):
                             cur_episode_id = torch.tensor(max(bc_freq_dict, key = bc_freq_dict.get), device = device)
 
-                            # This is only enabled when clusters are forced to be mapped to real bc's in a supervised manner
-                            try:
-                                # Is the cur_episode_id identifying the correct BC_ID?
-                                real_bc_id = barcode_id[m].item()
-                                k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
-                                log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
-                            except Exception as e:
-                                pass
+                            # # This is only enabled when clusters are forced to be mapped to real bc's in a supervised manner
+                            # try:
+                            #     # Is the cur_episode_id identifying the correct BC_ID?
+                            #     real_bc_id = barcode_id[m].item()
+                            #     k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
+                            #     log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
+                            # except Exception as e:
+                            #     pass
                         else:
                             cur_episode_id = big_ol_zero
 
                         embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
                         embA_stack = torch.stack(embA)
-                        x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
+
+                        # # Cosine Distance Metric for loss
+                        # x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
+
+                        # Euclidean Distance Metric for loss
+                        x = torch.cdist(embA_stack, embA_stack)
 
                         # Avoid doublecounting positive pairs
                         # Why doesn't this version work to reduce loss?
@@ -516,11 +521,19 @@ def run_experiment_sl(exp_settings):
                         pos_output = torch.sum(x_dist)
                         neg_output = torch.tensor(0, device = device)
                         if m > 0:
-                            negs = vectorize_cos_sim(
-                                embA_stack, embB_stack, device, same = False)
+                            
+                            # # Cosine Distance Metric for loss
+                            # negs = vectorize_cos_sim(
+                            #     embA_stack, embB_stack, device, same = False)
+                            
+                            # Euclidean Distance Metric for loss
+                            negs = torch.cdist(embA_stack, embB_stack)
                             
                             # If episode bc is diff from last episode, filter out any negative cos from loss
                             if i == 0 or torch.ne(cur_episode_id, prev_episode_id).item():
+
+                                # Margin on euclidean distance of 0.5 because reasons?
+                                negs = 0.5-negs
                                 negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
                                 neg_output = torch.sum(torch.square(negs))
                             else:
@@ -619,75 +632,75 @@ def run_experiment_sl(exp_settings):
                     k_means_reset = False
 
                     from sklearn.metrics import silhouette_score
-                    def pca_n_component_finder(data_std):
-                        pca = PCA(n_components=None)
-                        pca.fit(data_std)
+                    # def pca_n_component_finder(data_std):
+                    #     pca = PCA(n_components=None)
+                    #     pca.fit(data_std)
 
-                        exp_var = pca.explained_variance_ratio_ * 100
-                        cum_exp_var = np.cumsum(exp_var)
+                    #     exp_var = pca.explained_variance_ratio_ * 100
+                    #     cum_exp_var = np.cumsum(exp_var)
 
-                        plt.bar(range(1, data_std.shape[1]+1), exp_var, align='center',
-                                label='Individual explained variance')
+                    #     plt.bar(range(1, data_std.shape[1]+1), exp_var, align='center',
+                    #             label='Individual explained variance')
 
-                        plt.step(range(1, data_std.shape[1]+1), cum_exp_var, where='mid',
-                                label='Cumulative explained variance', color='red')
+                    #     plt.step(range(1, data_std.shape[1]+1), cum_exp_var, where='mid',
+                    #             label='Cumulative explained variance', color='red')
 
-                        plt.ylabel('Explained variance percentage')
-                        plt.xlabel('Principal component index')
-                        plt.xticks(ticks=[x for x in range(data_std.shape[1]+1)])
-                        plt.legend(loc='best')
-                        plt.tight_layout()
-                        plt.show()
+                    #     plt.ylabel('Explained variance percentage')
+                    #     plt.xlabel('Principal component index')
+                    #     plt.xticks(ticks=[x for x in range(data_std.shape[1]+1)])
+                    #     plt.legend(loc='best')
+                    #     plt.tight_layout()
+                    #     plt.show()
 
-                    # pca_n_component_finder(avg_inputs)
-                    pca = PCA(n_components=19)
-                    df = pca.fit_transform(avg_inputs)
-                    km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 100, max_iter = 100)
-                    y_km = km.fit_predict(df)
-                    print("PCA - Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
-                    km = KMeans(n_clusters = num_barcodes, init = 'k-means++', n_init= 100, max_iter = 100)
-                    y_km = km.fit_predict(df)
-                    print("PCA - KMeans | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+                    # # pca_n_component_finder(avg_inputs)
+                    # pca = PCA(n_components=19)
+                    # df = pca.fit_transform(avg_inputs)
+                    # km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 100, max_iter = 100)
+                    # y_km = km.fit_predict(df)
+                    # print("PCA - Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+                    # km = KMeans(n_clusters = num_barcodes, init = 'k-means++', n_init= 100, max_iter = 100)
+                    # y_km = km.fit_predict(df)
+                    # print("PCA - KMeans | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
 
-                    # Farthest Point Centroids
-                    def far_centroids_chosen(data, n = 10):
-                        centroids = []
-                        count = 0
-                        first_cent = np.random.choice(len(data))
-                        centroids.append(data[first_cent])
-                        # data = np.delete(data2, first_cent, 0)
-                        while len(centroids) < n:
-                            count += 1
-                            dist = np.zeros(len(data))
-                            min_dist = np.zeros_like(centroids)
-                            for c_idx, centroid in enumerate(centroids):
-                                for idx, point in enumerate(data):
-                                    dist[idx] = np.linalg.norm(centroid-point)
-                                min_id = np.argmin(dist)
-                                min_dist[c_idx]= data[min_id]
-                            next_centroid_id = np.argmax(min_dist)
-                            centroids.append(data[next_centroid_id])
-                            # data = np.delete(data, next_centroid_id, 0)
-                        return np.asarray(centroids)
+                    # # Farthest Point Centroids
+                    # def far_centroids_chosen(data, n = 10):
+                    #     centroids = []
+                    #     count = 0
+                    #     first_cent = np.random.choice(len(data))
+                    #     centroids.append(data[first_cent])
+                    #     # data = np.delete(data2, first_cent, 0)
+                    #     while len(centroids) < n:
+                    #         count += 1
+                    #         dist = np.zeros(len(data))
+                    #         min_dist = np.zeros_like(centroids)
+                    #         for c_idx, centroid in enumerate(centroids):
+                    #             for idx, point in enumerate(data):
+                    #                 dist[idx] = np.linalg.norm(centroid-point)
+                    #             min_id = np.argmin(dist)
+                    #             min_dist[c_idx]= data[min_id]
+                    #         next_centroid_id = np.argmax(min_dist)
+                    #         centroids.append(data[next_centroid_id])
+                    #         # data = np.delete(data, next_centroid_id, 0)
+                    #     return np.asarray(centroids)
                     
-                    center_groups = []
-                    scores = []
-                    for _ in range(100):
-                        centers = far_centroids_chosen(avg_inputs, 10)
-                        km = KMeans(n_clusters = num_barcodes, init = centers, n_init = 1, max_iter = 100)
-                        y_km = km.fit_predict(avg_inputs)
-                        scores.append(silhouette_score(avg_inputs, km.labels_))
-                        center_groups.append(centers)
+                    # center_groups = []
+                    # scores = []
+                    # for _ in range(100):
+                    #     centers = far_centroids_chosen(avg_inputs, 10)
+                    #     km = KMeans(n_clusters = num_barcodes, init = centers, n_init = 1, max_iter = 100)
+                    #     y_km = km.fit_predict(avg_inputs)
+                    #     scores.append(silhouette_score(avg_inputs, km.labels_))
+                    #     center_groups.append(centers)
 
-                    center = center_groups[np.argmax(scores)]
-                    km = KMeans(n_clusters = num_barcodes, init = centers, n_init=1, max_iter = 100)
-                    y_km = km.fit_predict(avg_inputs)
-                    print("Far-Init | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+                    # center = center_groups[np.argmax(scores)]
+                    # km = KMeans(n_clusters = num_barcodes, init = centers, n_init=1, max_iter = 100)
+                    # y_km = km.fit_predict(avg_inputs)
+                    # print("Far-Init | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
 
-                    # Random Centroids
-                    km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 100, max_iter = 100)
-                    y_km = km.fit_predict(avg_inputs)
-                    print("Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+                    # # Random Centroids
+                    # km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 100, max_iter = 100)
+                    # y_km = km.fit_predict(avg_inputs)
+                    # print("Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
                     
                     # K_Means++ centroids
                     km = KMeans(n_clusters = num_barcodes, init = 'k-means++', n_init= 100, max_iter = 100)
@@ -726,67 +739,67 @@ def run_experiment_sl(exp_settings):
                     # Interesting to see what percent the unsup k-means training is producing correct labels
                     # Current runs in 10a10b20s give it ~90% labelling accuracy
 
-                    # Maps BC_ID -> K_Means Cluster
-                    pred_bc_cluster = {k:[] for k in range(num_barcodes)}
+                    # # Maps BC_ID -> K_Means Cluster
+                    # pred_bc_cluster = {k:[] for k in range(num_barcodes)}
 
-                    # Figure out how the original barcode id's match to the clusters
-                    for idx, input_vals in enumerate(avg_inputs):
-                    # for idx, input_vals in enumerate(df):
-                        bc_id = barcode_id[idx//10].item()
-                        barcode_sims = torch.nn.functional.cosine_similarity(torch.tensor(input_vals,device=device), agent.dnd.barcode_guesses)
-                        k_means_id = torch.argmax(barcode_sims)
-                        pred_bc_cluster[bc_id].append(k_means_id.item())
+                    # # Figure out how the original barcode id's match to the clusters
+                    # for idx, input_vals in enumerate(avg_inputs):
+                    # # for idx, input_vals in enumerate(df):
+                    #     bc_id = barcode_id[idx//10].item()
+                    #     barcode_sims = torch.nn.functional.cosine_similarity(torch.tensor(input_vals,device=device), agent.dnd.barcode_guesses)
+                    #     k_means_id = torch.argmax(barcode_sims)
+                    #     pred_bc_cluster[bc_id].append(k_means_id.item())
 
-                    # Get number of occurences of BC-ID to K-Means ID
-                    pred_sort_bc = {}
-                    for k, v in pred_bc_cluster.items():
-                        temp = {}
-                        for elem in v:
-                            temp[elem] = temp.get(elem, 0)+1
-                        pred_sort_bc[k] = temp
+                    # # Get number of occurences of BC-ID to K-Means ID
+                    # pred_sort_bc = {}
+                    # for k, v in pred_bc_cluster.items():
+                    #     temp = {}
+                    #     for elem in v:
+                    #         temp[elem] = temp.get(elem, 0)+1
+                    #     pred_sort_bc[k] = temp
 
-                    # Sort the dicts for human readability
-                    pred2 = {}
-                    for k,v in pred_sort_bc.items():
-                        temp = sorted(v, key = v.get, reverse = True)
-                        pred2[k] = {x:v[x] for x in temp}
+                    # # Sort the dicts for human readability
+                    # pred2 = {}
+                    # for k,v in pred_sort_bc.items():
+                    #     temp = sorted(v, key = v.get, reverse = True)
+                    #     pred2[k] = {x:v[x] for x in temp}
 
-                    max_pred_bc = {}
-                    # If any BC_ID has a singular k-means ID, remove K-means_cluster ID from all other options
-                    for k,v in pred2.items():
-                        if len(v) == 1:
-                            for k_means, percent in v.items():
-                                max_pred_bc[k] = k_means
-                                for k1,v1 in pred2.items():
-                                    if k_means in v1.keys():
-                                        v1.pop(k_means)
-                                break
+                    # max_pred_bc = {}
+                    # # If any BC_ID has a singular k-means ID, remove K-means_cluster ID from all other options
+                    # for k,v in pred2.items():
+                    #     if len(v) == 1:
+                    #         for k_means, percent in v.items():
+                    #             max_pred_bc[k] = k_means
+                    #             for k1,v1 in pred2.items():
+                    #                 if k_means in v1.keys():
+                    #                     v1.pop(k_means)
+                    #             break
 
-                    # Check for high percent matches in other bc_ids
-                    print(pred2)
-                    for k,v in pred2.items():
-                        # print(pred2)
-                        for k_means, percent in v.items():
-                            if percent >= 60:
-                                max_pred_bc[k] = k_means
-                                for k1,v1 in pred2.items():
-                                    if k_means in v1.keys():
-                                        v1.pop(k_means)
-                                break
+                    # # Check for high percent matches in other bc_ids
+                    # print(pred2)
+                    # for k,v in pred2.items():
+                    #     # print(pred2)
+                    #     for k_means, percent in v.items():
+                    #         if percent >= 60:
+                    #             max_pred_bc[k] = k_means
+                    #             for k1,v1 in pred2.items():
+                    #                 if k_means in v1.keys():
+                    #                     v1.pop(k_means)
+                    #             break
 
-                    # If there are any bc_id's left over, it means a cluster wasn't identified for that BC, re-run k-means clustering
-                    # print(max_pred_bc)
-                    bc_found = max_pred_bc.keys()
-                    bc_left = [x for x in range(num_barcodes) if x not in bc_found]
-                    k_bc_found = max_pred_bc.values()
-                    k_bc_left = [x for x in range(num_barcodes) if x not in k_bc_found]
-                    print(bc_left, k_bc_left)
+                    # # If there are any bc_id's left over, it means a cluster wasn't identified for that BC, re-run k-means clustering
+                    # # print(max_pred_bc)
+                    # bc_found = max_pred_bc.keys()
+                    # bc_left = [x for x in range(num_barcodes) if x not in bc_found]
+                    # k_bc_found = max_pred_bc.values()
+                    # k_bc_left = [x for x in range(num_barcodes) if x not in k_bc_found]
+                    # print(bc_left, k_bc_left)
 
-                    k_means_to_bc = {k:v for k,v in zip(k_bc_found, bc_found)}
+                    # k_means_to_bc = {k:v for k,v in zip(k_bc_found, bc_found)}
 
-                    if len(bc_left):
-                        count += 1
-                        k_means_reset = True
+                    # if len(bc_left):
+                    #     count += 1
+                    #     k_means_reset = True
                     
 
             # Tensorboard Stuff
