@@ -95,10 +95,12 @@ def run_experiment_sl(exp_settings):
     # How many extra bits to add per barcode, and where
     noise_train_percent = exp_settings['noise_train_percent']
     noise_train_type = exp_settings['noise_train_type']
+    noise_type = exp_settings['noise_type']
 
     # Task Init
     # Example: 4 unique barcodes -> 16 total barcodes in epoch, 4 trials of each unique barcode
     episodes_per_epoch = num_barcodes**2
+    pulls_per_epoch = episodes_per_epoch*pulls_per_episode
 
     task = ContextualBandit(
         pulls_per_episode,
@@ -115,14 +117,21 @@ def run_experiment_sl(exp_settings):
 
     # LSTM Chooses which arm to pull
     dim_output_lstm = num_arms
-    dict_len = pulls_per_episode * (num_barcodes**2)
+    # dict_len = (pulls_per_episode - 3) * (num_barcodes**2)//2
+    dict_len = (pulls_per_episode) * (num_barcodes**2)
     value_weight = exp_settings["value_error_coef"]
     entropy_weight = exp_settings["entropy_error_coef"]
 
     # Input is obs/context/reward triplet
-    dim_input_lstm = num_arms + len(task.cluster_lists[0][0]) + 1
+    dim_input_lstm = num_arms + 1
+    if exp_settings['mem_store'] != "L2RL_base":
+        dim_input_lstm +=  len(task.cluster_lists[0][0])
+
     dim_hidden_lstm = exp_settings["dim_hidden_lstm"]
     learning_rate = exp_settings["lstm_learning_rate"]
+
+    # Data storage for K-Means Barcode guesses
+    avg_inputs = np.zeros((10*pulls_per_epoch, dim_input_lstm))
 
     # init agent / optimizer
     agent = Agent(
@@ -147,6 +156,9 @@ def run_experiment_sl(exp_settings):
             agent.dnd.embedder.load_state_dict(
                 torch.load(f"model/{model_name}_embedder.pt", map_location = device)
             )
+            
+        if exp_settings['switch_to_contrastive']:
+            agent.dnd.embedder.create_contrastive_layers()
 
         # Load clusters of barcodes
         task.cluster_lists = np.load(f"model/{model_name}.npz")[
@@ -182,6 +194,9 @@ def run_experiment_sl(exp_settings):
     log_bc_guess_accuracy = np.zeros(
         n_epochs,
     )
+    log_memory_id = np.zeros(
+        (n_epochs,pulls_per_epoch)
+    )
 
     # Tensorboard viewing
     if exp_settings["tensorboard_logging"]:
@@ -207,15 +222,16 @@ def run_experiment_sl(exp_settings):
     else:
         key_save_epochs = train_epochs + noise_epochs
 
-    # Data storage for K-Means Barcode guesses
-    pulls_per_epoch = episodes_per_epoch*pulls_per_episode
-    avg_inputs = np.zeros((pulls_per_epoch, dim_input_lstm))
-
     big_ol_zero = torch.tensor(0, dtype=torch.float32, device = device)
     print("\n", "-*-_-*- " * 3, "\n")
     # with torch.autograd.set_detect_anomaly(True):
     # loop over epoch
     for i in range(n_epochs):
+        if i < exp_settings['epochs']:
+            bc_noise_type = exp_settings['noise_train_type']
+        else:
+            bc_noise_type = exp_settings['noise_type']
+
         # Set to no_grad if in noise eval portion
         with torch.no_grad() if i >= exp_settings['epochs'] else nullcontext():
             time_start = time.perf_counter()
@@ -268,7 +284,7 @@ def run_experiment_sl(exp_settings):
                             exp_settings['embedding_size'])
                         if exp_settings['emb_loss'] == 'contrastive' and exp_settings['switch_to_contrastive']:
                             emb_model.h_lstm3, emb_model.c_lstm3 = emb_model.emb_get_init_states(
-                                exp_settings['embedding_size']//4)
+                                exp_settings['contrastive_size'])
 
 
                 # Always use ground truth bc for reward eval
@@ -292,7 +308,7 @@ def run_experiment_sl(exp_settings):
                     reward = obs[-1].view(1, -1)
 
                     # No noise, eval phase of model
-                    if not exp_settings["noise_type"]:
+                    if not bc_noise_type:
                         apply_noise_again = False
                         noisy_bc = original_bc.detach().clone()
 
@@ -319,21 +335,21 @@ def run_experiment_sl(exp_settings):
                         noisy_bc = original_bc.detach().clone()
 
                         # Applying the mask to the barcode at the idx
-                        if exp_settings["noise_type"] == "random":
+                        if bc_noise_type == "random":
                             for idx1, mask1 in zip(idx, mask):
                                 noisy_bc[0][idx1] = float(
                                     torch.ne(mask1, noisy_bc[0][idx1])
                                 )
 
                         # Applying a continuous block starting on the left end of bc
-                        elif exp_settings["noise_type"] == "left_mask":
+                        elif bc_noise_type == "left_mask":
                             for idx1, mask1 in enumerate(mask):
                                 noisy_bc[0][idx1] = float(
                                     torch.ne(mask1, noisy_bc[0][idx1])
                                 )
 
                         # Applying a continuous block covering the center of bc
-                        elif exp_settings["noise_type"] == "center_mask":
+                        elif bc_noise_type == "center_mask":
                             # Find center
                             center = len(task.cluster_lists[0][0]) // 2
 
@@ -348,13 +364,13 @@ def run_experiment_sl(exp_settings):
                                 )
 
                         # Applying an continuous block starting on the right end of bc
-                        elif exp_settings["noise_type"] == "right_mask":
+                        elif bc_noise_type == "right_mask":
                             for idx1, mask1 in enumerate(mask):
                                 loc = len(task.cluster_lists[0][0]) - 1 - idx1
                                 noisy_bc[0][loc] = float(torch.ne(mask1, noisy_bc[0][loc]))
 
                         # Even distribution of noise across bc
-                        elif exp_settings["noise_type"] == "checkerboard":
+                        elif bc_noise_type == "checkerboard":
                             if noise_percent != 0:
                                 idx = np.arange(
                                     0, len(task.cluster_lists[0][0]), int(1 / noise_percent)
@@ -369,9 +385,14 @@ def run_experiment_sl(exp_settings):
                             apply_noise_again = True
 
                     # Remake the input
-                    noisy_init_input = torch.cat(
-                        (action, noisy_bc, reward.view(1, 1)), dim=1
-                    )
+                    if exp_settings['mem_store'] != 'L2RL_base':
+                        noisy_init_input = torch.cat(
+                            (action, noisy_bc, reward.view(1, 1)), dim=1
+                        )
+                    else:
+                        noisy_init_input = torch.cat(
+                            (action, reward.view(1, 1)), dim=1
+                        )
 
                 # K-Means barcode Cluster ID by Mode across episode
                 bc_freq_dict = {}
@@ -419,12 +440,15 @@ def run_experiment_sl(exp_settings):
                     )
 
                     a_t, assumed_barcode_string, prob_a_t, v_t, entropy, h_t, c_t = output_t
-                    f_t, i_t, o_t, r_gate, m_t, k_means_barcode = cache
+                    f_t, i_t, o_t, r_gate, m_t, k_means_barcode, memory_id = cache
 
                     # compute immediate reward for actor network
                     r_t = get_reward_from_assumed_barcode(
                         a_t, real_bc, epoch_mapping, device, perfect_info
                     )
+
+                    # What memory was selected as the best match? (floordiv7 due to only storing 7 of 10 pulls in memory per episode)
+                    log_memory_id[i][m*pulls_per_episode + t] = torch.div(memory_id, 7, rounding_mode='floor')
 
                     # Does the predicted context match the actual context?
                     memory_accuracy += int(raw_bc == assumed_barcode_string)
@@ -438,11 +462,11 @@ def run_experiment_sl(exp_settings):
                     # Store inputs to id barcodes with k-means
                     if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'contrastive':
                         # Creating initial k-means clusters of first epoch inputs
-                        if i == 0:
-                            avg_inputs[m*pulls_per_episode + t] += input_to_lstm.view(-1).cpu().numpy()
+                        if i < 10:
+                            avg_inputs[i*episodes_per_epoch + m*pulls_per_episode + t] += input_to_lstm.view(-1).cpu().numpy()
 
                         # Identify barcode at end of episode by finding mode across k-means clusters for all pulls
-                        elif i > 0:
+                        else:
                             bc_freq_dict[k_means_barcode.item()] = bc_freq_dict.get(k_means_barcode.item(),0)+1
 
                     # Inputs to LSTM come from predicted actions and rewards of last time step
@@ -463,9 +487,14 @@ def run_experiment_sl(exp_settings):
                         next_bc = noisy_bc
 
                     # Create next input to feed back into LSTM
-                    last_action_output = torch.cat(
-                        (one_hot_action, next_bc, r_t.view(1, 1)), dim=1
-                    )
+                    if exp_settings['mem_store'] != 'L2RL_base':
+                        last_action_output = torch.cat(
+                            (one_hot_action, next_bc, r_t.view(1, 1)), dim=1
+                        )
+                    else:
+                        last_action_output = torch.cat(
+                            (one_hot_action, r_t.view(1, 1)), dim=1
+                        )
 
                 # LSTM/A2C Loss for Episode
                 returns = compute_returns(rewards, device, gamma=0.0)
@@ -485,71 +514,75 @@ def run_experiment_sl(exp_settings):
                         # Embedder Loss for Episode
                         a_dnd = agent.dnd
                         
-                        # if exp_settings['emb_loss'] == 'contrastive':
-                        # Check same/diff barcodes against previous episode
-                        if exp_settings['emb_loss'] == 'groundtruth':
-                            cur_episode_id = cross_ent_loss_tensor
-                        elif ( i>0 and (exp_settings['emb_loss'] == 'kmeans' or
-                                        exp_settings['emb_loss'] == 'contrastive')):
-                            cur_episode_id = torch.tensor(max(bc_freq_dict, key = bc_freq_dict.get), device = device)
+                        if exp_settings['emb_loss'] == 'contrastive':
+                            # Check same/diff barcodes against previous episode
+                            if exp_settings['emb_loss'] == 'groundtruth':
+                                cur_episode_id = cross_ent_loss_tensor
+                            elif ( i>10 and (exp_settings['emb_loss'] == 'kmeans' or
+                                            exp_settings['emb_loss'] == 'contrastive')):
+                                cur_episode_id = torch.tensor(max(bc_freq_dict, key = bc_freq_dict.get), device = device)
 
-                            # # This is only enabled when clusters are forced to be mapped to real bc's in a supervised manner
-                            # try:
-                            #     # Is the cur_episode_id identifying the correct BC_ID?
-                            #     real_bc_id = barcode_id[m].item()
-                            #     k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
-                            #     log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
-                            # except Exception as e:
-                            #     pass
-                        else:
-                            cur_episode_id = big_ol_zero
-
-                        embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
-                        embA_stack = torch.stack(embA)
-
-                        # # Cosine Distance Metric for loss
-                        # x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
-
-                        # Euclidean Distance Metric for loss
-                        x = torch.cdist(embA_stack, embA_stack)
-
-                        # Avoid doublecounting positive pairs
-                        # Why doesn't this version work to reduce loss?
-                        # x_dist = (torch.ones_like(x, device = device) - torch.square(x))/2
-                        x_dist = (torch.square(x))/2
-
-                        pos_output = torch.sum(x_dist)
-                        neg_output = torch.tensor(0, device = device)
-                        if m > 0:
-                            
-                            # # Cosine Distance Metric for loss
-                            # negs = vectorize_cos_sim(
-                            #     embA_stack, embB_stack, device, same = False)
-                            
-                            # Euclidean Distance Metric for loss
-                            negs = torch.cdist(embA_stack, embB_stack)
-                            
-                            # If episode bc is diff from last episode, filter out any negative cos from loss
-                            if i == 0 or torch.ne(cur_episode_id, prev_episode_id).item():
-
-                                # Margin on euclidean distance of 0.5 because reasons?
-                                negs = 0.5-negs
-                                negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
-                                neg_output = torch.sum(torch.square(negs))
+                                # # This is only enabled when clusters are forced to be mapped to real bc's in a supervised manner
+                                # try:
+                                #     # Is the cur_episode_id identifying the correct BC_ID?
+                                #     real_bc_id = barcode_id[m].item()
+                                #     k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
+                                #     log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
+                                # except Exception as e:
+                                #     pass
                             else:
-                                # pos_output += torch.sum(torch.ones_like(negs, device = device) - torch.square(negs))
-                                pos_output += torch.sum(torch.square(negs))
-                            
-                        embB_stack = embA_stack.detach().clone()
-                        prev_episode_id = cur_episode_id
+                                cur_episode_id = big_ol_zero
 
-                        # Finding avg loss over the x pulls of an episode
-                        scale_factor = 1.5*pulls_per_episode
-                        
-                        episode_loss = torch.div((pos_output+neg_output), scale_factor).detach().clone().requires_grad_(True)
-                        a_dnd.contrastive_loss[i] += episode_loss
-                        a_dnd.contrastive_pos_loss[i] += pos_output
-                        a_dnd.contrastive_neg_loss[i] += neg_output
+                            embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
+                            embA_stack = torch.stack(embA)
+
+                            # Cosine Distance Metric for loss
+                            x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
+
+                            # # Euclidean Distance Metric for loss
+                            # x = torch.cdist(embA_stack, embA_stack)
+
+                            # Avoid doublecounting positive pairs
+                            # Why doesn't this version work to reduce loss?
+                            # x_dist = (torch.ones_like(x, device = device) - torch.square(x))/2
+                            # x_dist = (torch.square(x))/2
+                            x_dist = (x)/2
+
+                            pos_output = torch.sum(x_dist)
+                            neg_output = torch.tensor(0, device = device)
+                            if m > 0:
+                                
+                                # Cosine Distance Metric for loss
+                                negs = vectorize_cos_sim(
+                                    embA_stack, embB_stack, device, same = False)
+                                
+                                # # Euclidean Distance Metric for loss
+                                # negs = torch.cdist(embA_stack, embB_stack)
+                                
+                                # If episode bc is diff from last episode, filter out any negative cos from loss
+                                if i == 0 or torch.ne(cur_episode_id, prev_episode_id).item():
+
+                                    # # Margin on euclidean distance of 0.5 because reasons?
+                                    # negs = 0.5-negs
+                                    negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
+                                    # neg_output = torch.sum(torch.square(negs))
+                                    neg_output = torch.sum(negs)
+                                else:
+                                    # pos_output += torch.sum(torch.ones_like(negs, device = device) - torch.square(negs))
+                                    # pos_output += torch.sum(torch.square(negs))
+                                    pos_output += torch.sum(negs)
+                                
+                            embB_stack = embA_stack.detach().clone()
+                            prev_episode_id = cur_episode_id
+
+                            # Finding avg loss over the x pulls of an episode
+                            scale_factor = 1.5*pulls_per_episode
+                            scale_factor = 2
+                            
+                            episode_loss = torch.div((pos_output+neg_output), scale_factor).detach().clone().requires_grad_(True)
+                            a_dnd.contrastive_loss[i] += episode_loss
+                            a_dnd.contrastive_pos_loss[i] += pos_output
+                            a_dnd.contrastive_neg_loss[i] += neg_output
 
                         if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'groundtruth':
                             loss_vals = [x[2] for x in a_dnd.trial_buffer]
@@ -570,21 +603,24 @@ def run_experiment_sl(exp_settings):
 
                         # Freeze whichever Embedder LSTM is not being used
                         kmeans_layers = [agent.dnd.embedder.LSTM, agent.dnd.embedder.l2i]
-                        contrastive_layers = [agent.dnd.embedder.LSTM3, agent.dnd.embedder.l32i]
 
-                        # Unfreeze Contrastive LSTM
-                        if exp_settings['emb_loss'] == 'contrastive' and exp_settings['switch_to_contrastive']:
-                            layers.extend(kmeans_layers)
-                            for layer in contrastive_layers:
-                                for name, param in layer.named_parameters():
-                                    param.requires_grad = True
+                        # # Unfreeze Contrastive LSTM
+                        # if exp_settings['emb_loss'] == 'contrastive' and exp_settings['switch_to_contrastive']:
+                        #     contrastive_layers = [
+                        #         # agent.dnd.embedder.LSTM3,
+                        #         agent.dnd.embedder.l12i,
+                        #         # agent.dnd.embedder.l32i,
+                        #         ]
+                        #     layers.extend(kmeans_layers)
+                        #     for layer in contrastive_layers:
+                        #         for name, param in layer.named_parameters():
+                        #             param.requires_grad = True
 
-                        # Unfreeze K_Means LSTM
-                        if exp_settings['emb_loss'] == 'groundtruth' or exp_settings['emb_loss'] == 'kmeans':
-                            layers.extend(contrastive_layers)
-                            for layer in kmeans_layers:
-                                for name, param in layer.named_parameters():
-                                    param.requires_grad = True
+                        # # Unfreeze K_Means LSTM
+                        # if exp_settings['emb_loss'] == 'groundtruth' or exp_settings['emb_loss'] == 'kmeans':
+                        #     for layer in kmeans_layers:
+                        #         for name, param in layer.named_parameters():
+                        #             param.requires_grad = True
 
                         # Freezing LSTM/A2C and unused Embedder LSTM
                         for layer in layers:
@@ -616,7 +652,7 @@ def run_experiment_sl(exp_settings):
                 log_return[i] += cumulative_reward
 
                 # Updating avg accuracy per episode
-                # log_bc_guess_accuracy[i] += agent.unsure_bc_guess
+                log_bc_guess_accuracy[i] += agent.unsure_bc_guess
                 log_embedder_accuracy[i] += agent.dnd.pred_accuracy
                 log_memory_accuracy[i] += memory_accuracy
 
@@ -625,42 +661,13 @@ def run_experiment_sl(exp_settings):
                 log_loss_policy[i] += loss_policy
                 log_loss_total[i] += loss
 
-            if i == 0 and (exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'contrastive'):
+            if i == 10 and (exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'contrastive'):
                 k_means_reset = True
                 count = 0
                 while k_means_reset and count < 100:
                     k_means_reset = False
 
                     from sklearn.metrics import silhouette_score
-                    # def pca_n_component_finder(data_std):
-                    #     pca = PCA(n_components=None)
-                    #     pca.fit(data_std)
-
-                    #     exp_var = pca.explained_variance_ratio_ * 100
-                    #     cum_exp_var = np.cumsum(exp_var)
-
-                    #     plt.bar(range(1, data_std.shape[1]+1), exp_var, align='center',
-                    #             label='Individual explained variance')
-
-                    #     plt.step(range(1, data_std.shape[1]+1), cum_exp_var, where='mid',
-                    #             label='Cumulative explained variance', color='red')
-
-                    #     plt.ylabel('Explained variance percentage')
-                    #     plt.xlabel('Principal component index')
-                    #     plt.xticks(ticks=[x for x in range(data_std.shape[1]+1)])
-                    #     plt.legend(loc='best')
-                    #     plt.tight_layout()
-                    #     plt.show()
-
-                    # # pca_n_component_finder(avg_inputs)
-                    # pca = PCA(n_components=19)
-                    # df = pca.fit_transform(avg_inputs)
-                    # km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 100, max_iter = 100)
-                    # y_km = km.fit_predict(df)
-                    # print("PCA - Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
-                    # km = KMeans(n_clusters = num_barcodes, init = 'k-means++', n_init= 100, max_iter = 100)
-                    # y_km = km.fit_predict(df)
-                    # print("PCA - KMeans | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
 
                     # # Farthest Point Centroids
                     # def far_centroids_chosen(data, n = 10):
@@ -668,7 +675,7 @@ def run_experiment_sl(exp_settings):
                     #     count = 0
                     #     first_cent = np.random.choice(len(data))
                     #     centroids.append(data[first_cent])
-                    #     # data = np.delete(data2, first_cent, 0)
+                    #     data = np.delete(data, first_cent, 0)
                     #     while len(centroids) < n:
                     #         count += 1
                     #         dist = np.zeros(len(data))
@@ -676,11 +683,11 @@ def run_experiment_sl(exp_settings):
                     #         for c_idx, centroid in enumerate(centroids):
                     #             for idx, point in enumerate(data):
                     #                 dist[idx] = np.linalg.norm(centroid-point)
-                    #             min_id = np.argmin(dist)
+                    #             min_id = np.argmax(dist)
                     #             min_dist[c_idx]= data[min_id]
                     #         next_centroid_id = np.argmax(min_dist)
                     #         centroids.append(data[next_centroid_id])
-                    #         # data = np.delete(data, next_centroid_id, 0)
+                    #         data = np.delete(data, next_centroid_id, 0)
                     #     return np.asarray(centroids)
                     
                     # center_groups = []
@@ -695,42 +702,20 @@ def run_experiment_sl(exp_settings):
                     # center = center_groups[np.argmax(scores)]
                     # km = KMeans(n_clusters = num_barcodes, init = centers, n_init=1, max_iter = 100)
                     # y_km = km.fit_predict(avg_inputs)
-                    # print("Far-Init | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+                    # print("Far-Init | ", silhouette_score(avg_inputs, km.labels_))
+                    # # print("Far-Init | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
 
                     # # Random Centroids
                     # km = KMeans(n_clusters = num_barcodes, init = 'random', n_init= 100, max_iter = 100)
                     # y_km = km.fit_predict(avg_inputs)
-                    # print("Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
+                    # print("Random | ", silhouette_score(avg_inputs, km.labels_))
+                    # # print("Random | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
                     
                     # K_Means++ centroids
                     km = KMeans(n_clusters = num_barcodes, init = 'k-means++', n_init= 100, max_iter = 100)
                     y_km = km.fit_predict(avg_inputs)
-                    print("KMeans | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
-
-                    # agent.dnd.barcode_guesses = torch.as_tensor(km.cluster_centers_, device = device)
-                    # # Plot clusters after PCA down to 2
-
-
-                    # # print(df)
-                    # # print(y_km)
-
-
-                    # #Getting unique labels
-                    
-                    # u_labels = np.unique(y_km)
-                    
-                    # #plotting the results:
-                    # fig = plt.figure()
-                    # ax = fig.add_subplot(projection='3d')
-
-                    # for i in u_labels:
-                    #     ax.scatter(df[y_km == i , 0] , df[y_km == i , 1], df[y_km == i , 2],  label = i)
-                    # ax.scatter(km.cluster_centers_[:, 0],
-                    #             km.cluster_centers_[:, 1],
-                    #             km.cluster_centers_[:, 2],
-                    #             s=80, color='k')
-
-                    # plt.show()
+                    print("KMeans | ", silhouette_score(avg_inputs, km.labels_))
+                    # print("KMeans | ", km.inertia_, km.n_iter_, silhouette_score(avg_inputs, km.labels_))
 
                     agent.dnd.barcode_guesses = torch.as_tensor(km.cluster_centers_, device = device)
                     
@@ -808,6 +793,7 @@ def run_experiment_sl(exp_settings):
                 tb.add_scalar("Mem Retrieval Accuracy", log_memory_accuracy[i], i)
                 tb.add_scalar("Emb Retrieval Accuracy", log_embedder_accuracy[i], i)
                 tb.add_scalar("Emb Loss", agent.dnd.embedder_loss[i], i)
+                tb.add_histogram("Recency of Chosen Memory", log_memory_id[i], i)
                 if i < exp_settings["epochs"]:
                     tb.add_histogram("R-Gate Sigmoided Train Epochs", r_gate, i)
                 else:
@@ -844,7 +830,7 @@ def run_experiment_sl(exp_settings):
                 if i > 11:
                     avg_acc = log_memory_accuracy[i - 9 : i + 1].mean()/pulls_per_epoch
                     avg_emb_acc = log_embedder_accuracy[i - 9 : i + 1].mean()/pulls_per_epoch
-                    avg_bc_acc = log_bc_guess_accuracy[i - 9 : i + 1].mean()/episodes_per_epoch
+                    avg_bc_acc = log_bc_guess_accuracy[i - 9 : i + 1].mean()/pulls_per_epoch
                 else:
                     avg_acc = log_memory_accuracy[: i + 1].mean()/pulls_per_epoch
                     avg_emb_acc = log_embedder_accuracy[: i + 1].mean()/pulls_per_epoch

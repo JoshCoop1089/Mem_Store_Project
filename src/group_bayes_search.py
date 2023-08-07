@@ -20,7 +20,9 @@ test_vals = [
 
 # [raw_emb_size, raw_emb_lr, loss_switch]
 test_vals = [(4+0.5*x, -5+0.2*x, 0+0.05*x) for x in range(11)]
-# test_vals = [(4+0.5*x, -3-0.2*x, 0.5-0.05*x) for x in range(11)]
+test_vals = [(9-0.5*x, -5+0.2*x, 0+0.05*x) for x in range(11)]
+test_vals = [(4+0.5*x, -3-0.2*x, 0+0.05*x) for x in range(11)]
+test_vals = [(9-0.5*x, -3-0.2*x, 0+0.05*x) for x in range(11)]
 
 def run_exp(input_val):
     exp_settings = {}
@@ -40,9 +42,9 @@ def run_exp(input_val):
 
     exp_settings['mem_mode'] = "LSTM"
 
-    # exp_settings['emb_loss'] = 'kmeans'
-    exp_settings['emb_loss'] = 'contrastive'
-    exp_settings['switch_to_contrastive'] = True
+    exp_settings['emb_loss'] = 'kmeans'
+    # exp_settings['emb_loss'] = 'contrastive'
+    exp_settings['switch_to_contrastive'] = False
 
     # Task Complexity
     exp_settings["num_arms"] = 10
@@ -98,18 +100,25 @@ def run_exp(input_val):
     # exp_settings['value_error_coef'] = 0.7177
     # exp_settings["entropy_error_coef"] = 0.0004
 
-    # 10a10b20s
+    # 10a10b20s20n
     exp_settings['dim_hidden_a2c'] = int(2**8.11)
     exp_settings['dim_hidden_lstm'] = int(2**8.11)
     exp_settings['lstm_learning_rate'] = 10**-3.0788
     exp_settings['value_error_coef'] = 0.4495
     exp_settings["entropy_error_coef"] = 0.00
-    exp_settings['embedding_size'] = int(2**7.27899)
+    exp_settings['contrastive_size'] = int(2**8)
+    exp_settings['dropout_coef'] = 0.4
+
+    # 10a10b20s50n
+    exp_settings['dim_hidden_a2c'] = int(2**6.9958)
+    exp_settings['dim_hidden_lstm'] = int(2**6.9958)
+    exp_settings['lstm_learning_rate'] = 10**-3.0788
+    exp_settings['value_error_coef'] = 0.9407
+    exp_settings["entropy_error_coef"] = 0.006
 
     raw_emb, raw_emb_lr, loss_switch = input_val
+    exp_settings['embedding_size'] = int(2**raw_emb)
     exp_settings['embedder_learning_rate'] = 10**raw_emb_lr
-    # exp_settings['embedding_size'] = int(2**raw_emb)
-    # exp_settings['dropout_coef'] = loss_switch
 
     # Print out current hyperparams to console
     print("\nNext Run Commencing with the following params:")
@@ -151,9 +160,8 @@ def run_exp(input_val):
 
     # out_text = f"('target': {no_noise_eval}, 'params': ('dim_hidden_lstm': {raw_lstm}, 'entropy_error_coef': {raw_ent_cf}, 'lstm_learning_rate': {raw_lr}, 'value_error_coef': {raw_val_cf}))" 
     # out_text = f"('target': {no_noise_eval*no_noise_accuracy}, 'params': ('embedding_learning_rate': {raw_emb_lr}, 'embedding_size': {raw_emb}, 'dropout_coef': {loss_switch}))" 
-    out_text = f"('target': {no_noise_eval*no_noise_accuracy}, 'params': ('embedding_learning_rate': {raw_emb_lr}))" 
+    out_text = f"('target': {no_noise_eval*no_noise_accuracy}, 'params': ('embedding_learning_rate': {raw_emb_lr}, 'embedding_size': {raw_emb}))" 
     out_text_changed = out_text.replace("(","{").replace(")", "}").replace("'", "\"")
     print(out_text_changed)
 
-# run_exp(test_vals[int(sys.argv[1])])
-run_exp(test_vals[0])
+run_exp(test_vals[int(sys.argv[1])])

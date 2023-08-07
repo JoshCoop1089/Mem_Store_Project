@@ -115,9 +115,10 @@ def run_experiment(exp_base, exp_difficulty):
 
     # Task Size specific hyperparams
     exp_settings = get_hyperparameters(exp_settings)
+    exp_settings['contrastive_size'] = 2**7
 
     if exp_settings['switch_to_contrastive']:
-        exp_settings['embedder_learning_rate'] = 0.005
+        exp_settings['embedder_learning_rate'] = 0.0005
 
     exp_length = exp_settings["epochs"] + exp_settings["noise_eval_epochs"] * len(
         exp_settings["noise_percent"]

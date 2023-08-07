@@ -113,7 +113,7 @@ class DND:
         self.check_config()
 
     def reset_memory(self):
-        self.keys = [[]]
+        self.keys = []
         self.vals = []
         self.trial_hidden_states = []
         self.key_context_map = {}
@@ -144,23 +144,26 @@ class DND:
         self.trial_buffer.pop(0)
         keys = self.trial_buffer
         # self.trial_hidden_states = [keys[-1]]
-        # self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != () and i > len(keys)//4]
-        self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != ()]
+        self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != () and i > len(keys)//4]
+        # self.trial_hidden_states = [keys[i] for i in range(len(keys)) if keys[i] != ()]
 
         """
         Keys in Memory store the following:
             Embedding from LSTM2
-            Real BarCcode w/o Noise
+            Real BarCode w/o Noise
             BC w/o Noise predicted by Embedder
             BC w/o Noise predicted by Memory when this embedding was used as a search key
             Real BC with Noise for use in T_SNE plotting (to be depreciated eventually)
         """
-
+        temp_keys, temp_vals = [],[]
         for embedding, real_bc, _, model_predicted_bc, mem_pred_bc, barcode_string_noised in self.trial_hidden_states:
-            self.keys = [
+            temp_keys.append(
                 [torch.squeeze(embedding.detach()), real_bc, model_predicted_bc, mem_pred_bc, barcode_string_noised]
-            ] + self.keys
-            self.vals = [torch.squeeze(memory_val.detach())] + self.vals
+            )
+            temp_vals.append(torch.squeeze(memory_val.detach()))
+
+        self.keys = temp_keys + self.keys
+        self.vals = temp_vals + self.vals
 
         while len(self.keys) > self.dict_len:
             self.keys.pop()
@@ -168,10 +171,6 @@ class DND:
         return
 
     def save_memory_non_embedder(self, memory_key, barcode_string, barcode_string_noised, memory_val):
-        try:
-            test = self.keys[0][0]
-        except IndexError:
-            self.keys.pop(0)
 
         """
         Keys in Memory store the following:
@@ -265,7 +264,7 @@ class DND:
         # if best_sim_score.item() < 0.75:
         #     return _empty_memory(self.hidden_lstm_dim, self.device), _empty_barcode(self.exp_settings['barcode_size']), torch.tensor(0, device=self.device)
         # else:
-        return best_memory_val, mem_predicted_context, best_sim_score
+        return best_memory_val, mem_predicted_context, best_mem_id
 
     def get_memory_non_embedder(self, query_key):
         """Perform a 1-NN search over dnd
@@ -282,7 +281,7 @@ class DND:
 
         """
         try:
-            test = self.keys[0][0]
+            test = self.keys[0]
             n_memories = len(self.keys)
         except IndexError:
             n_memories = 0
@@ -310,7 +309,7 @@ class DND:
             # get the barcode for that memory
             barcode = self.keys[best_memory_id][1]
 
-            return best_memory_val, barcode, best_sim_score
+            return best_memory_val, barcode, best_memory_id
 
     def _get_memory(self, similarities, policy="1NN"):
         """get the episodic memory according to some policy

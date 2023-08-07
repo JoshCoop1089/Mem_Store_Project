@@ -17,9 +17,10 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 #context, embedding, L2RL
 
 # exp_types = ['context', 'embedding']
-# exp_types = ['context', 'embedding', 'L2RL']
+# exp_types = ['context', 'embedding', 'L2RL_base', "L2RL_context"]
 # exp_types = ['context']
 exp_types = ['embedding']
+exp_types = ['L2RL_base']
 
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
@@ -40,7 +41,7 @@ emb_with_mem = True
 switch_to_contrastive = False
 
 # Experiment Difficulty
-hamming_clustering = 1      #Create evenly distributed clusters based on arms/barcodes
+hamming_clustering = 3      #Create evenly distributed clusters based on arms/barcodes
 
 # num_arms = 5
 # num_barcodes = 5
@@ -52,12 +53,12 @@ num_barcodes = 10
 barcode_size = 20
 noise_percent = [8/40]
 
-pulls_per_episode = 4
+pulls_per_episode = 10
 
 noise_types = [
     # False,
-    # "right_mask",
-    "random",
+    "right_mask",
+    # "random",
     # "left_mask",
     # "center_mask",
     # "checkerboard",
@@ -73,24 +74,24 @@ exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrasti
 figure_save_location = "..\\Mem_Store_Project\\figs\\"
 ###### NO MORE CHANGES!!!!!!!! ##########
 
-# # Train Model
-# for noise_type in noise_types:
-#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-#     exp_difficulty = exp_diff_general + exp_diff_specifics
-#     run_experiment(exp_base, exp_difficulty)
+# Train Model
+for noise_type in noise_types:
+    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+    exp_difficulty = exp_diff_general + exp_diff_specifics
+    run_experiment(exp_base, exp_difficulty)
 
-if 'embedding' in exp_type:
-    # After training K-Means, load in weights and train Contrastive
-    switch_to_contrastive = True
-    emb_loss = 'contrastive'
-    exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrastive]
-    training_epochs = 200
-    noise_epochs = 40
+# if 'embedding' in exp_type:
+#     # After training K-Means, load in weights and train Contrastive
+#     switch_to_contrastive = True
+#     emb_loss = 'contrastive'
+#     exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrastive]
+#     training_epochs = 1000
+#     noise_epochs = 40
 
-    for noise_type in noise_types:
-        exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-        exp_difficulty = exp_diff_general + exp_diff_specifics
-        run_experiment(exp_base, exp_difficulty)
+#     for noise_type in noise_types:
+#         exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#         exp_difficulty = exp_diff_general + exp_diff_specifics
+#         run_experiment(exp_base, exp_difficulty)
  
 # Eval Model on different noise types
 training_epochs = 0
@@ -110,13 +111,13 @@ noise_types = [
     # "checkerboard",
     ]
 
-for noise_type in noise_types:
-    if 'embedding' in exp_types and "no_mem" in noise_type:
-        noise_type = noise_type[:-7]
-        emb_with_mem = False
+# for noise_type in noise_types:
+#     if 'embedding' in exp_types and "no_mem" in noise_type:
+#         noise_type = noise_type[:-7]
+#         emb_with_mem = False
         
-    exp_diff_specifics = [noise_percent, emb_loss,
-                          emb_with_mem, switch_to_contrastive]
-    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = exp_diff_general + exp_diff_specifics
-    run_experiment(exp_base, exp_difficulty)
+#     exp_diff_specifics = [noise_percent, emb_loss,
+#                           emb_with_mem, switch_to_contrastive]
+#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#     exp_difficulty = exp_diff_general + exp_diff_specifics
+#     run_experiment(exp_base, exp_difficulty)

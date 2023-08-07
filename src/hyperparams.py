@@ -208,14 +208,24 @@ def get_hyperparameters(exp_settings):
             exp_settings['dropout_coef'] = 0
 
         if exp_settings['barcode_size'] == 20:
-            exp_settings['dim_hidden_a2c'] = int(2**8.11)
-            exp_settings['dim_hidden_lstm'] = int(2**8.11)
-            exp_settings['lstm_learning_rate'] = 10**-3.0788
-            exp_settings['value_error_coef'] = 0.4495
-            exp_settings["entropy_error_coef"] = 0.00
-            exp_settings['embedding_size'] = int(2**7.27899)
-            exp_settings['embedder_learning_rate'] = 10**-3.29064
-            exp_settings['dropout_coef'] = 0
+            if exp_settings['noise_train_percent'] == 0.2:
+                exp_settings['dim_hidden_a2c'] = int(2**8.11)
+                exp_settings['dim_hidden_lstm'] = int(2**8.11)
+                exp_settings['lstm_learning_rate'] = 10**-3.0788
+                exp_settings['value_error_coef'] = 0.4495
+                exp_settings["entropy_error_coef"] = 0.00
+                exp_settings['embedding_size'] = int(2**8)
+                exp_settings['embedder_learning_rate'] = 10**-3.4
+                exp_settings['dropout_coef'] = 0.4
+            elif exp_settings['noise_train_percent'] == 0.5:
+                exp_settings['dim_hidden_a2c'] = int(2**6.9958)
+                exp_settings['dim_hidden_lstm'] = int(2**6.9958)
+                exp_settings['lstm_learning_rate'] = 10**-3.0788
+                exp_settings['value_error_coef'] = 0.9407
+                exp_settings["entropy_error_coef"] = 0.006
+                exp_settings['embedding_size'] = int(2**8)
+                exp_settings['embedder_learning_rate'] = 10**-3.4
+                exp_settings['dropout_coef'] = 0.4
 
         if exp_settings['barcode_size'] == 40:
             exp_settings['dim_hidden_a2c'] = int(2**7.0673)
