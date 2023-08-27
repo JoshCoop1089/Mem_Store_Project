@@ -20,17 +20,17 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 # exp_types = ['context', 'embedding', 'L2RL_base', "L2RL_context"]
 # exp_types = ['context']
 exp_types = ['embedding']
-exp_types = ['L2RL_base']
+# exp_types = ['L2RL_base']
 
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
 
-training_epochs = 200
+training_epochs = 20
 noise_epochs = 4
 
-noise_train_percent = 0.2
+noise_train_percent = 0.5
 noise_train_type = 'right_mask'
 
 # emb_loss = 'groundtruth'
@@ -41,16 +41,16 @@ emb_with_mem = True
 switch_to_contrastive = False
 
 # Experiment Difficulty
-hamming_clustering = 3      #Create evenly distributed clusters based on arms/barcodes
+hamming_clustering = 1      #Create evenly distributed clusters based on arms/barcodes
 
 # num_arms = 5
 # num_barcodes = 5
 # barcode_size = 10
 # noise_percent = [4/20]
 
-num_arms = 10
-num_barcodes = 10
-barcode_size = 20
+num_arms = 4
+num_barcodes = 4
+barcode_size = 4
 noise_percent = [8/40]
 
 pulls_per_episode = 10

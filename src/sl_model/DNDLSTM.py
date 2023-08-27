@@ -138,7 +138,7 @@ class DNDLSTM(nn.Module):
                         self.unsure_bc_guess += max(barcode_sims)
 
                 mem, predicted_barcode, best_mem_id = self.dnd.get_memory(
-                    h, barcode_string, barcode_id, barcode_string_noised
+                    c_t, barcode_string, barcode_id, barcode_string_noised
                 )
                 m_t = mem.tanh()
 
@@ -180,7 +180,7 @@ class DNDLSTM(nn.Module):
                 self.dnd.save_memory_non_embedder(q_t, barcode_string, barcode_string_noised, c_t)
 
         # policy
-        pi_a_t, v_t, entropy = self.a2c.forward(h_t)
+        pi_a_t, v_t, entropy = self.a2c.forward(c_t)
         # pick an action
         a_t, prob_a_t = self.pick_action(pi_a_t)
 

@@ -247,6 +247,8 @@ def run_experiment_sl(exp_settings):
             ) = task.sample()
             agent.dnd.mapping = epoch_mapping
 
+            store_embs = {k:None for k in range(exp_settings['contrastive_chunk_size'])}
+
             # # How many times is a barcode the same between episodes
             # barcodes_are_different(barcode_strings)
 
@@ -384,6 +386,17 @@ def run_experiment_sl(exp_settings):
                         if torch.sum(noisy_bc) == 0:
                             apply_noise_again = True
 
+                        # Check to see if a bit was flipped in the raw BC portion
+                        if bc_noise_type == 'random' and any((len(task.cluster_lists[0][0]) - 1 - id_val) < exp_settings['barcode_size'] for id_val in idx):
+                            front_raw = noisy_bc[0, :exp_settings['barcode_size']]
+                            for raw_bc in task.raw_barcodes:
+                                # Make sure any new bc isn't a repeat of an old bc
+                                if torch.equal(front_raw, raw_bc):
+                                    print("F", front_raw)
+                                    print("C", raw_bc)
+                                    apply_noise_again = True
+                                    break
+
                     # Remake the input
                     if exp_settings['mem_store'] != 'L2RL_base':
                         noisy_init_input = torch.cat(
@@ -514,133 +527,158 @@ def run_experiment_sl(exp_settings):
                         # Embedder Loss for Episode
                         a_dnd = agent.dnd
                         
-                        if exp_settings['emb_loss'] == 'contrastive':
+                        # if exp_settings['emb_loss'] == 'contrastive':
                             # Check same/diff barcodes against previous episode
-                            if exp_settings['emb_loss'] == 'groundtruth':
-                                cur_episode_id = cross_ent_loss_tensor
-                            elif ( i>10 and (exp_settings['emb_loss'] == 'kmeans' or
-                                            exp_settings['emb_loss'] == 'contrastive')):
-                                cur_episode_id = torch.tensor(max(bc_freq_dict, key = bc_freq_dict.get), device = device)
+                            # if exp_settings['emb_loss'] == 'groundtruth':
+                            #     cur_episode_id = cross_ent_loss_tensor
+                            # elif ( i>10 and (exp_settings['emb_loss'] == 'kmeans' or
+                            #                 exp_settings['emb_loss'] == 'contrastive')):
+                            #     cur_episode_id = torch.tensor(max(bc_freq_dict, key = bc_freq_dict.get), device = device)
 
-                                # # This is only enabled when clusters are forced to be mapped to real bc's in a supervised manner
-                                # try:
-                                #     # Is the cur_episode_id identifying the correct BC_ID?
-                                #     real_bc_id = barcode_id[m].item()
-                                #     k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
-                                #     log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
-                                # except Exception as e:
-                                #     pass
+                            #     # # This is only enabled when clusters are forced to be mapped to real bc's in a supervised manner
+                            #     # try:
+                            #     #     # Is the cur_episode_id identifying the correct BC_ID?
+                            #     #     real_bc_id = barcode_id[m].item()
+                            #     #     k_means_cluster_guess = k_means_to_bc[cur_episode_id.item()]
+                            #     #     log_bc_guess_accuracy[i] += int(real_bc_id == k_means_cluster_guess)
+                            #     # except Exception as e:
+                            #     #     pass
+                            # else:
+                            #     cur_episode_id = big_ol_zero
+
+                        embA = [x[0].view(-1) for x in a_dnd.trial_buffer[3:]]
+                        embA_stack = torch.stack(embA)
+
+                        # Store embeddings from episode to be dealt with later
+                        store_embs[m%exp_settings['contrastive_chunk_size']] = embA_stack
+
+                        if m % exp_settings['contrastive_chunk_size'] == 0 and m != 0:
+                            pos_output = torch.tensor(0.0, device = device)
+                            neg_output = torch.tensor(0.0, device = device)
+                            # Calculate closest positive pair loss for episodes
+                            for k, embA_stack in store_embs.items():
+                                pos_episodes = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
+                                pos_output += (1-torch.min(pos_episodes))
+                                # Calculate farthest negative pairs against other episodes
+                                for k2, embB_stack in store_embs.items():
+                                    if k < k2:
+                                        neg_output += torch.max(vectorize_cos_sim(embA_stack, embB_stack, device, same = False))
+
+                            # # Cosine Distance Metric for loss
+                            # x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
+
+                            # # # Euclidean Distance Metric for loss
+                            # # x = torch.cdist(embA_stack, embA_stack)
+
+                            # # Avoid doublecounting positive pairs
+                            # # Why doesn't this version work to reduce loss?
+                            # # x_dist = (torch.ones_like(x, device = device) - torch.square(x))/2
+                            # # x_dist = (torch.square(x))/2
+                            # # x_dist = (x)/2
+                            # # pos_output = torch.sum(x_dist)
+
+                            # # Find the farthest positive pair
+                            # pos_output = torch.min(x)
+                            # neg_output = torch.tensor(0, device = device)
+                            # if m > 0:
+                                
+                            #     # Cosine Distance Metric for loss
+                            #     negs = vectorize_cos_sim(
+                            #         embA_stack, embB_stack, device, same = False)
+                                
+                            #     # # Euclidean Distance Metric for loss
+                            #     # negs = torch.cdist(embA_stack, embB_stack)
+                                
+                            #     # If episode bc is diff from last episode, filter out any negative cos from loss
+                            #     if i == 0 or torch.ne(cur_episode_id, prev_episode_id).item():
+
+                            #         # # Margin on euclidean distance of 0.5 because reasons?
+                            #         # negs = 0.5-negs
+                            #         negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
+                            #         # neg_output = torch.sum(torch.square(negs))
+
+                            #         # Find the closest negative pair
+                            #         neg_output = torch.max(negs)
+                            #     else:
+                            #         # pos_output += torch.sum(torch.ones_like(negs, device = device) - torch.square(negs))
+                            #         # pos_output += torch.sum(torch.square(negs))
+                            #         pos_output += torch.min(negs)
+                                
+                            # embB_stack = embA_stack.detach().clone()
+                            # prev_episode_id = cur_episode_id
+                            if not exp_settings['neg_pairs_only']:
+                                pos_output = torch.div(
+                                    pos_output, exp_settings['contrastive_chunk_size'])
                             else:
-                                cur_episode_id = big_ol_zero
+                                pos_output = big_ol_zero
 
-                            embA = [x[0].view(-1) for x in a_dnd.trial_buffer]
-                            embA_stack = torch.stack(embA)
+                            # Offset chunk count by one to not use same episode pairs in count
+                            neg_pairs = (exp_settings['contrastive_chunk_size']-1)*(exp_settings['contrastive_chunk_size'])/2
+                            neg_output = torch.div(neg_output,neg_pairs)
+                            episode_loss = (pos_output+neg_output).detach().clone().requires_grad_(True)
 
-                            # Cosine Distance Metric for loss
-                            x = vectorize_cos_sim(embA_stack, embA_stack, device, same = True)
-
-                            # # Euclidean Distance Metric for loss
-                            # x = torch.cdist(embA_stack, embA_stack)
-
-                            # Avoid doublecounting positive pairs
-                            # Why doesn't this version work to reduce loss?
-                            # x_dist = (torch.ones_like(x, device = device) - torch.square(x))/2
-                            # x_dist = (torch.square(x))/2
-                            x_dist = (x)/2
-
-                            pos_output = torch.sum(x_dist)
-                            neg_output = torch.tensor(0, device = device)
-                            if m > 0:
-                                
-                                # Cosine Distance Metric for loss
-                                negs = vectorize_cos_sim(
-                                    embA_stack, embB_stack, device, same = False)
-                                
-                                # # Euclidean Distance Metric for loss
-                                # negs = torch.cdist(embA_stack, embB_stack)
-                                
-                                # If episode bc is diff from last episode, filter out any negative cos from loss
-                                if i == 0 or torch.ne(cur_episode_id, prev_episode_id).item():
-
-                                    # # Margin on euclidean distance of 0.5 because reasons?
-                                    # negs = 0.5-negs
-                                    negs = torch.where(negs > big_ol_zero, negs, big_ol_zero)
-                                    # neg_output = torch.sum(torch.square(negs))
-                                    neg_output = torch.sum(negs)
-                                else:
-                                    # pos_output += torch.sum(torch.ones_like(negs, device = device) - torch.square(negs))
-                                    # pos_output += torch.sum(torch.square(negs))
-                                    pos_output += torch.sum(negs)
-                                
-                            embB_stack = embA_stack.detach().clone()
-                            prev_episode_id = cur_episode_id
-
-                            # Finding avg loss over the x pulls of an episode
-                            scale_factor = 1.5*pulls_per_episode
-                            scale_factor = 2
-                            
-                            episode_loss = torch.div((pos_output+neg_output), scale_factor).detach().clone().requires_grad_(True)
                             a_dnd.contrastive_loss[i] += episode_loss
                             a_dnd.contrastive_pos_loss[i] += pos_output
                             a_dnd.contrastive_neg_loss[i] += neg_output
 
                         if exp_settings['emb_loss'] == 'kmeans' or exp_settings['emb_loss'] == 'groundtruth':
-                            loss_vals = [x[2] for x in a_dnd.trial_buffer]
+                            loss_vals = [x[2] for x in a_dnd.trial_buffer[3:]]
                             episode_loss = torch.stack(loss_vals).sum()
                             
-                        a_dnd.embedder_loss[i] += episode_loss
+                        if (exp_settings['emb_loss'] == 'contrastive' and m % exp_settings['contrastive_chunk_size'] == 0 and m != 0) or (exp_settings['emb_loss'] != 'contrastive'):
+                            a_dnd.embedder_loss[i] += episode_loss
 
-                        # Unfreeze Embedder
-                        for name, param in a_dnd.embedder.named_parameters():
-                            param.requires_grad = True
+                            # Unfreeze Embedder
+                            for name, param in a_dnd.embedder.named_parameters():
+                                param.requires_grad = True
 
-                        if exp_settings['emb_loss'] == 'contrastive':
-                            a_dnd.embedder.e2c.weight.requires_grad = False
-                            a_dnd.embedder.e2c.bias.requires_grad = False
+                            if exp_settings['emb_loss'] == 'contrastive':
+                                a_dnd.embedder.e2c.weight.requires_grad = False
+                                a_dnd.embedder.e2c.bias.requires_grad = False
 
-                        # Freeze LSTM/A2C
-                        layers = [agent.i2h, agent.h2h, agent.a2c]
+                            # Freeze LSTM/A2C
+                            layers = [agent.i2h, agent.h2h, agent.a2c]
 
-                        # Freeze whichever Embedder LSTM is not being used
-                        kmeans_layers = [agent.dnd.embedder.LSTM, agent.dnd.embedder.l2i]
+                            # Freeze whichever Embedder LSTM is not being used
+                            kmeans_layers = [agent.dnd.embedder.LSTM, agent.dnd.embedder.l2i]
 
-                        # # Unfreeze Contrastive LSTM
-                        # if exp_settings['emb_loss'] == 'contrastive' and exp_settings['switch_to_contrastive']:
-                        #     contrastive_layers = [
-                        #         # agent.dnd.embedder.LSTM3,
-                        #         agent.dnd.embedder.l12i,
-                        #         # agent.dnd.embedder.l32i,
-                        #         ]
-                        #     layers.extend(kmeans_layers)
-                        #     for layer in contrastive_layers:
-                        #         for name, param in layer.named_parameters():
-                        #             param.requires_grad = True
+                            # # Unfreeze Contrastive LSTM
+                            # if exp_settings['emb_loss'] == 'contrastive' and exp_settings['switch_to_contrastive']:
+                            #     contrastive_layers = [
+                            #         # agent.dnd.embedder.LSTM3,
+                            #         agent.dnd.embedder.l12i,
+                            #         # agent.dnd.embedder.l32i,
+                            #         ]
+                            #     layers.extend(kmeans_layers)
+                            #     for layer in contrastive_layers:
+                            #         for name, param in layer.named_parameters():
+                            #             param.requires_grad = True
 
-                        # # Unfreeze K_Means LSTM
-                        # if exp_settings['emb_loss'] == 'groundtruth' or exp_settings['emb_loss'] == 'kmeans':
-                        #     for layer in kmeans_layers:
-                        #         for name, param in layer.named_parameters():
-                        #             param.requires_grad = True
+                            # # Unfreeze K_Means LSTM
+                            # if exp_settings['emb_loss'] == 'groundtruth' or exp_settings['emb_loss'] == 'kmeans':
+                            #     for layer in kmeans_layers:
+                            #         for name, param in layer.named_parameters():
+                            #             param.requires_grad = True
 
-                        # Freezing LSTM/A2C and unused Embedder LSTM
-                        for layer in layers:
-                            for name, param in layer.named_parameters():
+                            # Freezing LSTM/A2C and unused Embedder LSTM
+                            for layer in layers:
+                                for name, param in layer.named_parameters():
+                                    param.requires_grad = False
+
+                            # Embedder Backprop
+                            a_dnd.embed_optimizer.zero_grad()
+                            episode_loss.backward(retain_graph=True)
+                            a_dnd.embed_optimizer.step()
+                            a_dnd.embed_optimizer.zero_grad()
+
+                            # Freeze Embedder until next memory retrieval
+                            for name, param in a_dnd.embedder.named_parameters():
                                 param.requires_grad = False
 
-                        # Embedder Backprop
-                        a_dnd.embed_optimizer.zero_grad()
-                        episode_loss.backward(retain_graph=True)
-                        a_dnd.embed_optimizer.step()
-                        a_dnd.embed_optimizer.zero_grad()
-
-                        # Freeze Embedder until next memory retrieval
-                        for name, param in a_dnd.embedder.named_parameters():
-                            param.requires_grad = False
-
-                        # Unfreeze LSTM/A2C
-                        for layer in layers:
-                            for name, param in layer.named_parameters():
-                                param.requires_grad = True
+                            # Unfreeze LSTM/A2C
+                            for layer in layers:
+                                for name, param in layer.named_parameters():
+                                    param.requires_grad = True
 
                     # LSTM and A2C Backprop
                     optimizer.zero_grad()
@@ -804,13 +842,16 @@ def run_experiment_sl(exp_settings):
             # Print reports every 10% of the total number of epochs
             if i % (int(n_epochs / 10)) == 0 or i == n_epochs - 1:
                 if exp_settings['mem_store'] == 'embedding':
+                    modifier = 1
+                    if exp_settings['emb_loss'] == 'contrastive':
+                        modifier = exp_settings['contrastive_chunk_size']
                     print(
                         "Epoch %3d | avg_return = %.2f | loss: LSTM = %.2f, Embedder = %.2f | time = %.2f"
                         % (
                             i,
                             log_return[i]/pulls_per_epoch,
                             log_loss_total[i]/episodes_per_epoch,
-                            agent.dnd.embedder_loss[i]/episodes_per_epoch,
+                            agent.dnd.embedder_loss[i]/(episodes_per_epoch/modifier),
                             run_time[i],
                         )
                     )
@@ -868,11 +909,11 @@ def run_experiment_sl(exp_settings):
     log_memory_accuracy /= pulls_per_epoch
 
     # Scale Loss Logs for graphing
-    agent.dnd.contrastive_loss /= episodes_per_epoch
-    agent.dnd.contrastive_pos_loss /= episodes_per_epoch
-    agent.dnd.contrastive_neg_loss /= episodes_per_epoch
+    agent.dnd.contrastive_loss /= (episodes_per_epoch /
+                                   exp_settings['contrastive_chunk_size'])
+    agent.dnd.contrastive_pos_loss /= (episodes_per_epoch/exp_settings['contrastive_chunk_size'])
+    agent.dnd.contrastive_neg_loss /= (episodes_per_epoch/exp_settings['contrastive_chunk_size'])
     agent.dnd.embedder_loss /= episodes_per_epoch
-
     # A2C Loss
     log_loss_value /= episodes_per_epoch
     log_loss_policy /= episodes_per_epoch

@@ -90,6 +90,10 @@ def run_experiment(exp_base, exp_difficulty):
     exp_settings["lstm_learning_rate"] = 10**-3.332  # 4.66e-4
     exp_settings["value_error_coef"] = 0.62
     exp_settings["dropout_coef"] = 0.25
+    
+    # Contrastive Loss Tweaks
+    exp_settings['contrastive_chunk_size'] = 10
+    exp_settings['neg_pairs_only'] = False
 
     # Experimental Variables
     (
@@ -188,15 +192,17 @@ def run_experiment(exp_base, exp_difficulty):
         print(
             f"A2C_Size: {exp_settings['dim_hidden_a2c']} | LSTM_Size: {exp_settings['dim_hidden_lstm']} | LSTM_LR: {round(exp_settings['lstm_learning_rate'], 5)}"
         )
+        print(
+            f"Val_CF: {round(exp_settings['value_error_coef'], 5)} | Ent_CF: {round(exp_settings['entropy_error_coef'], 5)}"
+        )
         if exp_settings["mem_store"] == "embedding":
             print(
                 f"Emb_LR: {round(exp_settings['embedder_learning_rate'], 5)} | Emb_Size: {exp_settings['embedding_size']}"
             )
             print(
                 f"Memory Mode: {exp_settings['mem_mode']} | Emb Loss: {exp_settings['emb_loss']}")
-        print(
-            f"Val_CF: {round(exp_settings['value_error_coef'], 5)} | Ent_CF: {round(exp_settings['entropy_error_coef'], 5)}"
-        )
+            print(f"Contrastive Loss Neg Pair Only: {exp_settings['neg_pairs_only']} | Con Loss Episodes used: {exp_settings['contrastive_chunk_size']}")
+
 
         for i in range(num_repeats):
             print(

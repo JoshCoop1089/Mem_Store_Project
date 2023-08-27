@@ -24,6 +24,15 @@ test_vals = [(9-0.5*x, -5+0.2*x, 0+0.05*x) for x in range(11)]
 test_vals = [(4+0.5*x, -3-0.2*x, 0+0.05*x) for x in range(11)]
 test_vals = [(9-0.5*x, -3-0.2*x, 0+0.05*x) for x in range(11)]
 
+c = [5.0+x for x in range(5)]
+c.extend([9.0-x for x in range(5)])
+a = [-5+0.4*x for x in range(5)]
+a.extend(a)
+
+# print(a, c)
+test_vals = list(zip(c,a,range(10)))
+# print(test_vals)
+
 def run_exp(input_val):
     exp_settings = {}
 
@@ -42,8 +51,8 @@ def run_exp(input_val):
 
     exp_settings['mem_mode'] = "LSTM"
 
-    exp_settings['emb_loss'] = 'kmeans'
-    # exp_settings['emb_loss'] = 'contrastive'
+    # exp_settings['emb_loss'] = 'kmeans'
+    exp_settings['emb_loss'] = 'contrastive'
     exp_settings['switch_to_contrastive'] = False
 
     # Task Complexity
@@ -58,11 +67,15 @@ def run_exp(input_val):
     # Noise Complexity
     exp_settings["hamming_threshold"] = 1
     exp_settings["pulls_per_episode"] = 10
-    exp_settings["noise_percent"] = [0.2]
+    exp_settings["noise_percent"] = [0.5]
     exp_settings["noise_type"] = "random"
-    exp_settings["noise_train_percent"] = 0.2
+    exp_settings["noise_train_percent"] = 0.5
     exp_settings['noise_train_type'] = 'right_mask'
     exp_settings['perfect_noise'] = False
+
+    # Contrastive Loss Tweaks
+    exp_settings['contrastive_chunk_size'] = 20
+    exp_settings['neg_pairs_only'] = False
 
     # Data Logging
     exp_settings["tensorboard_logging"] = False
@@ -128,15 +141,16 @@ def run_exp(input_val):
     print(
         f"A2C_Size: {exp_settings['dim_hidden_a2c']} | LSTM_Size: {exp_settings['dim_hidden_lstm']} | LSTM_LR: {round(exp_settings['lstm_learning_rate'], 5)}"
     )
+    print(
+        f"Val_CF: {round(exp_settings['value_error_coef'], 5)} | Ent_CF: {round(exp_settings['entropy_error_coef'], 5)}"
+    )
     if exp_settings["mem_store"] == "embedding":
         print(
             f"Emb_LR: {round(exp_settings['embedder_learning_rate'], 5)} | Emb_Size: {exp_settings['embedding_size']}"
         )
         print(
             f"Memory Mode: {exp_settings['mem_mode']} | Emb Loss: {exp_settings['emb_loss']}")
-    print(
-        f"Val_CF: {round(exp_settings['value_error_coef'], 5)} | Ent_CF: {round(exp_settings['entropy_error_coef'], 5)}"
-    )
+        print(f"Contrastive Loss Neg Pair Only: {exp_settings['neg_pairs_only']} | Con Loss Episodes used: {exp_settings['contrastive_chunk_size']}")
 
     # Current function being used as maximization target is just avg of total epoch returns
     logs_for_graphs, loss_logs, key_data = run_experiment_sl(exp_settings)
@@ -164,4 +178,5 @@ def run_exp(input_val):
     out_text_changed = out_text.replace("(","{").replace(")", "}").replace("'", "\"")
     print(out_text_changed)
 
-run_exp(test_vals[int(sys.argv[1])])
+# run_exp(test_vals[int(sys.argv[1])])
+run_exp(test_vals[0])
