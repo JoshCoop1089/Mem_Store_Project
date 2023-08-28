@@ -1,0 +1,11 @@
+{"target": 0.6666400426626206, "params": {"dim_hidden_lstm": 9, "entropy_error_coef": 0.0865, "lstm_learning_rate": -3, "value_error_coef": 0.7441}}
+{"target": 0.26831998229026793, "params": {"dim_hidden_lstm": 6.597, "entropy_error_coef": 0.0134, "lstm_learning_rate": -3.8705, "value_error_coef": 0.4878}}      
+{"target": 0.7019200360774994, "params": {"dim_hidden_lstm": 6.9958, "entropy_error_coef": 0.006, "lstm_learning_rate": -3.0788, "value_error_coef": 0.9407}}       
+{"target": 0.606800045967102, "params": {"dim_hidden_lstm": 7.0673, "entropy_error_coef": 0.0, "lstm_learning_rate": -3.4393, "value_error_coef": 1.0}}
+{"target": 0.6747200465202332, "params": {"dim_hidden_lstm": 6.42929, "entropy_error_coef": 0.04, "lstm_learning_rate": -3.32629, "value_error_coef": 0.2146}}      
+{"target": 0.698640034198761, "params": {"dim_hidden_lstm": 7.117, "entropy_error_coef": 0.0446, "lstm_learning_rate": -3.0818, "value_error_coef": 0.8046}}        
+{"target": 0.6951200485229492, "params": {"dim_hidden_lstm": 8.4056, "entropy_error_coef": 0.049, "lstm_learning_rate": -3.017, "value_error_coef": 0.9885}}        
+{"target": 0.703040052652359, "params": {"dim_hidden_lstm": 8.6357, "entropy_error_coef": 0.0004, "lstm_learning_rate": -3.501, "value_error_coef": 0.7177}}        
+{"target": 0.6570400369167327, "params": {"dim_hidden_lstm": 8.11, "entropy_error_coef": 0.0, "lstm_learning_rate": -3, "value_error_coef": 0.4495}}
+{"target": 0.6012000256776809, "params": {"dim_hidden_lstm": 6.0873, "entropy_error_coef": 0.09921, "lstm_learning_rate": -3.4539, "value_error_coef": 1.0}}        
+{"target": 0.6409600484371185, "params": {"dim_hidden_lstm": 7.2753, "entropy_error_coef": 0.04356, "lstm_learning_rate": -3.5947, "value_error_coef": 0.907}} 

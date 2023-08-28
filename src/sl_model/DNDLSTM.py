@@ -32,6 +32,7 @@ class DNDLSTM(nn.Module):
         self.device = device
         self.exp_settings = exp_settings
         self.unsure_bc_guess = torch.Tensor([0.0]).to(self.device)
+        self.barcode_id = torch.Tensor([-1]).to(self.device)
         self.N_GATES = 4
 
         # input-hidden weights
@@ -83,7 +84,9 @@ class DNDLSTM(nn.Module):
                 q_t = h
 
             # Store hidden states in memory for t-SNE later, but not used in L2RL calculations
-            elif self.exp_settings["mem_store"] == "L2RL":
+            elif self.exp_settings["mem_store"] == "L2RL_context":
+                q_t = h
+            elif self.exp_settings["mem_store"] == "L2RL_base":
                 q_t = h
 
             else:
@@ -109,39 +112,33 @@ class DNDLSTM(nn.Module):
         # new cell state = gated(prev_c) + gated(new_stuff)
         c_t = torch.mul(f_t, c) + torch.mul(i_t, c_t_new)
 
-        if self.exp_settings["mem_store"] == "L2RL":
-            sim_score = torch.tensor(0, device=self.device)
+        if "L2RL" in self.exp_settings["mem_store"]:
             m_t = torch.zeros_like(h, device=self.device)
             predicted_barcode = "0" * self.exp_settings["barcode_size"]
+            best_mem_id = 0
+
         else:
             if self.exp_settings["mem_store"] == "embedding":
                 # Freeze all LSTM Layers before getting memory
                 layers = [self.i2h, self.h2h, self.a2c]
+
+                # Freeze K-Means Embedder for Contrastive eval
+                if self.exp_settings['emb_loss'] == 'contrastive' and self.exp_settings['switch_to_contrastive']:
+                    layers.extend([self.dnd.embedder.LSTM, self.dnd.embedder.l2i])
+
                 for layer in layers:
                     for name, param in layer.named_parameters():
                         param.requires_grad = False
 
-                # Query Memory (hidden state passed into embedder, barcode_id used for embedder loss function)
-                if self.exp_settings['mem_store_key'] == 'hidden':
-                    # Taken care of in standard code above
-                    pass
-                
-                # Ritter style barcode only
-                elif self.exp_settings['mem_store_key'] == 'context':
-                    h = barcode_tensor
-
-                # The full input to LSTM1
-                elif self.exp_settings['mem_store_key'] == 'full':
-                    h = obs_bar_reward
-
-                if self.exp_settings['emb_loss'] == 'kmeans':
+                # Use K-Means Clustering to ID pseudo labels for barcodes based on inputs to LSTM
+                if self.exp_settings['emb_loss'] == 'kmeans' or self.exp_settings['emb_loss'] == 'contrastive':
                     if len(self.dnd.barcode_guesses) > 0:
                         barcode_sims = torch.nn.functional.cosine_similarity(obs_bar_reward, self.dnd.barcode_guesses)
-                        barcode_id = torch.argmax(barcode_sims).view(1)
+                        self.barcode_id = torch.argmax(barcode_sims).view(1)
                         self.unsure_bc_guess += max(barcode_sims)
 
-                mem, predicted_barcode, sim_score = self.dnd.get_memory(
-                    h, barcode_string, barcode_id, barcode_string_noised
+                mem, predicted_barcode, best_mem_id = self.dnd.get_memory(
+                    c_t, barcode_string, barcode_id, barcode_string_noised
                 )
                 m_t = mem.tanh()
 
@@ -151,7 +148,7 @@ class DNDLSTM(nn.Module):
                         param.requires_grad = True
 
             else:  # mem_store == context or hidden
-                mem, predicted_barcode, sim_score = self.dnd.get_memory_non_embedder(
+                mem, predicted_barcode, best_mem_id = self.dnd.get_memory_non_embedder(
                     q_t
                 )
                 m_t = mem.tanh()
@@ -166,7 +163,8 @@ class DNDLSTM(nn.Module):
         # Store the most updated hidden state in memory for future use/t-sne
         if (
             self.exp_settings["mem_store"] == "hidden"
-            or self.exp_settings["mem_store"] == "L2RL"
+            or self.exp_settings["mem_store"] == "L2RL_context"
+            or self.exp_settings["mem_store"] == "L2RL_base"
         ):
             q_t = h_t
 
@@ -182,13 +180,13 @@ class DNDLSTM(nn.Module):
                 self.dnd.save_memory_non_embedder(q_t, barcode_string, barcode_string_noised, c_t)
 
         # policy
-        pi_a_t, v_t, entropy = self.a2c.forward(h_t)
+        pi_a_t, v_t, entropy = self.a2c.forward(c_t)
         # pick an action
         a_t, prob_a_t = self.pick_action(pi_a_t)
 
         # fetch activity
         output = (a_t, predicted_barcode, prob_a_t, v_t, entropy, h_t, c_t)
-        cache = (f_t, i_t, o_t, r_t, m_t, sim_score)
+        cache = (f_t, i_t, o_t, r_t, m_t, self.barcode_id, best_mem_id)
 
         return output, cache
 

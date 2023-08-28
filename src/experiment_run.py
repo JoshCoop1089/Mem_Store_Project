@@ -1,6 +1,5 @@
 import sys
-
-from contextual_choice_sl import run_experiment
+from exp_naming import run_experiment
 
 """
 Notes:
@@ -18,63 +17,48 @@ i'm not sure what will happen if num_barcodes isn't an integer multiple of num_a
 #context, embedding, L2RL
 
 # exp_types = ['context', 'embedding']
-exp_types = ['context', 'embedding', 'L2RL']
+# exp_types = ['context', 'embedding', 'L2RL_base', "L2RL_context"]
 # exp_types = ['context']
-# exp_types = ['embedding']
+exp_types = ['embedding']
+# exp_types = ['L2RL_base']
 
 try:
     exp_type = [exp_types[int(sys.argv[1])]]
 except:
     exp_type = exp_types
 
-training_epochs = 800
-noise_epochs = 20
-noise_train_percent = 0.2
+training_epochs = 20
+noise_epochs = 4
+
+noise_train_percent = 0.5
 noise_train_type = 'right_mask'
 
-mem_store_key = 'hidden'
-# mem_store_key = 'context'
-# mem_store_key = 'full'
-
-emb_loss = 'groundtruth'
-# emb_loss = 'kmeans'
+# emb_loss = 'groundtruth'
+emb_loss = 'kmeans'
 # emb_loss = 'contrastive'
 
 emb_with_mem = True
+switch_to_contrastive = False
 
 # Experiment Difficulty
 hamming_clustering = 1      #Create evenly distributed clusters based on arms/barcodes
-sim_threshold = 0           #Create one cluster regardless of arms/barcodes
 
-num_arms = 5
-num_barcodes = 10
-barcode_size = 20
+# num_arms = 5
+# num_barcodes = 5
+# barcode_size = 10
+# noise_percent = [4/20]
 
-# num_arms = 8
-# num_barcodes = 16
-# barcode_size = 40
+num_arms = 4
+num_barcodes = 4
+barcode_size = 4
+noise_percent = [8/40]
 
 pulls_per_episode = 10
 
-# try: 
-#     mem_limits = (int(sys.argv[1]), pulls_per_episode - int(sys.argv[1]))
-# except:
-mem_limits = (0,pulls_per_episode)
-
-
-noise_percent = [4/20]
-# noise_percent = [8/40]
-
-# noise_percent = [0/20]
-# noise_percent = [8/20]
-# noise_percent = [6/24]
-# noise_percent = [12/24]
-# noise_percent = [10/40]
-# noise_percent = [20/40]
 noise_types = [
     # False,
-    # "right_mask",
-    "random",
+    "right_mask",
+    # "random",
     # "left_mask",
     # "center_mask",
     # "checkerboard",
@@ -84,7 +68,7 @@ noise_types = [
 num_repeats = 1
 
 exp_diff_general = [hamming_clustering, num_arms, num_barcodes, barcode_size, pulls_per_episode]
-exp_diff_specifics = [sim_threshold, noise_percent, mem_limits, mem_store_key, emb_loss, emb_with_mem]
+exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrastive]
 
 # Modify this to fit your machines save paths
 figure_save_location = "..\\Mem_Store_Project\\figs\\"
@@ -95,38 +79,45 @@ for noise_type in noise_types:
     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
     exp_difficulty = exp_diff_general + exp_diff_specifics
     run_experiment(exp_base, exp_difficulty)
-    
+
+# if 'embedding' in exp_type:
+#     # After training K-Means, load in weights and train Contrastive
+#     switch_to_contrastive = True
+#     emb_loss = 'contrastive'
+#     exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrastive]
+#     training_epochs = 1000
+#     noise_epochs = 40
+
+#     for noise_type in noise_types:
+#         exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#         exp_difficulty = exp_diff_general + exp_diff_specifics
+#         run_experiment(exp_base, exp_difficulty)
+ 
 # Eval Model on different noise types
 training_epochs = 0
 noise_epochs = 40
-num_repeats = 10
+num_repeats = 1
 
 noise_percent = [4/20, 6/20, 8/20, 10/20, 12/20, 14/20]
 # noise_percent = [8/40, 12/40, 16/40, 20/40, 24/40, 28/40]
 
-# noise_percent = [0/20, 2/20, 4/20, 6/20, 8/20, 10/20]
-# noise_percent = [8/20, 10/20, 12/20, 14/20, 16/20, 18/20]
-# noise_percent = [6/24, 8/24, 10/24, 12/24, 14/24, 16/24]
-# noise_percent = [10/40, 15/40, 20/40, 25/40, 30/40, 35/40]
-# noise_percent = [20/40, 25/40, 30/40, 35/40, 40/40, 45/40]
-
 noise_types = [
     # False,
     # "right_mask",
-    "random_no_mem",
     "random",
+    # "random_no_mem",
     # "left_mask",
     # "center_mask",
     # "checkerboard",
     ]
 
-for noise_type in noise_types:
-    if 'embedding' in exp_types and "no_mem" in noise_type:
-        noise_type = noise_type[:-7]
-        emb_with_mem = False
-        exp_diff_specifics = [sim_threshold, noise_percent,
-                              mem_limits, mem_store_key, emb_loss, emb_with_mem]
-
-    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = exp_diff_general + exp_diff_specifics
-    run_experiment(exp_base, exp_difficulty)
+# for noise_type in noise_types:
+#     if 'embedding' in exp_types and "no_mem" in noise_type:
+#         noise_type = noise_type[:-7]
+#         emb_with_mem = False
+        
+#     exp_diff_specifics = [noise_percent, emb_loss,
+#                           emb_with_mem, switch_to_contrastive]
+#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#     exp_difficulty = exp_diff_general + exp_diff_specifics
+#     run_experiment(exp_base, exp_difficulty)
