@@ -27,7 +27,7 @@ try:
 except:
     exp_type = exp_types
 
-training_epochs = 20
+training_epochs = 10
 noise_epochs = 4
 
 noise_train_percent = 0.5
@@ -48,9 +48,9 @@ hamming_clustering = 1      #Create evenly distributed clusters based on arms/ba
 # barcode_size = 10
 # noise_percent = [4/20]
 
-num_arms = 4
-num_barcodes = 4
-barcode_size = 4
+num_arms = 10
+num_barcodes = 10
+barcode_size = 20
 noise_percent = [8/40]
 
 pulls_per_episode = 10
@@ -74,11 +74,11 @@ exp_diff_specifics = [noise_percent, emb_loss, emb_with_mem, switch_to_contrasti
 figure_save_location = "..\\Mem_Store_Project\\figs\\"
 ###### NO MORE CHANGES!!!!!!!! ##########
 
-# Train Model
-for noise_type in noise_types:
-    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-    exp_difficulty = exp_diff_general + exp_diff_specifics
-    run_experiment(exp_base, exp_difficulty)
+# # Train Model
+# for noise_type in noise_types:
+#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+#     exp_difficulty = exp_diff_general + exp_diff_specifics
+#     run_experiment(exp_base, exp_difficulty)
 
 # if 'embedding' in exp_type:
 #     # After training K-Means, load in weights and train Contrastive
@@ -95,29 +95,29 @@ for noise_type in noise_types:
  
 # Eval Model on different noise types
 training_epochs = 0
-noise_epochs = 40
+noise_epochs = 5
 num_repeats = 1
 
-noise_percent = [4/20, 6/20, 8/20, 10/20, 12/20, 14/20]
+noise_percent = [20/20, 25/20, 30/20]
 # noise_percent = [8/40, 12/40, 16/40, 20/40, 24/40, 28/40]
 
 noise_types = [
     # False,
-    # "right_mask",
-    "random",
+    "right_mask",
+    # "random",
     # "random_no_mem",
     # "left_mask",
     # "center_mask",
     # "checkerboard",
     ]
 
-# for noise_type in noise_types:
-#     if 'embedding' in exp_types and "no_mem" in noise_type:
-#         noise_type = noise_type[:-7]
-#         emb_with_mem = False
+for noise_type in noise_types:
+    if 'embedding' in exp_types and "no_mem" in noise_type:
+        noise_type = noise_type[:-7]
+        emb_with_mem = False
         
-#     exp_diff_specifics = [noise_percent, emb_loss,
-#                           emb_with_mem, switch_to_contrastive]
-#     exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
-#     exp_difficulty = exp_diff_general + exp_diff_specifics
-#     run_experiment(exp_base, exp_difficulty)
+    exp_diff_specifics = [noise_percent, emb_loss,
+                          emb_with_mem, switch_to_contrastive]
+    exp_base = exp_type, training_epochs, noise_epochs, noise_train_percent, noise_train_type, noise_type, num_repeats
+    exp_difficulty = exp_diff_general + exp_diff_specifics
+    run_experiment(exp_base, exp_difficulty)

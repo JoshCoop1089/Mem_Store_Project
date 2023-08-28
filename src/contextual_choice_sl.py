@@ -387,13 +387,14 @@ def run_experiment_sl(exp_settings):
                             apply_noise_again = True
 
                         # Check to see if a bit was flipped in the raw BC portion
-                        if bc_noise_type == 'random' and any((len(task.cluster_lists[0][0]) - 1 - id_val) < exp_settings['barcode_size'] for id_val in idx):
+                        if  (bc_noise_type == 'random' and any(id_val < exp_settings['barcode_size'] for id_val in idx)) or\
+                            (bc_noise_type == 'right_mask' and i >= exp_settings['epochs'] and noise_percent > noise_train_percent):
                             front_raw = noisy_bc[0, :exp_settings['barcode_size']]
-                            for raw_bc in task.raw_barcodes:
+                            for raw_bc_tensor in task.raw_barcodes:
                                 # Make sure any new bc isn't a repeat of an old bc
-                                if torch.equal(front_raw, raw_bc):
+                                if torch.equal(front_raw, raw_bc_tensor):
                                     print("F", front_raw)
-                                    print("C", raw_bc)
+                                    print("C", raw_bc_tensor)
                                     apply_noise_again = True
                                     break
 

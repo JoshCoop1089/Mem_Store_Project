@@ -668,6 +668,15 @@ if __name__ == "__main__":
     # stats = [10,10,20, 4.0, 1]
     # stats = [10,10,20, 5.0, 1]
 
+    # stats = [5,10,10, 0.2]
+    # stats = [5,10,10, 0.4]
+    # stats = [5,10,20, 0]
+    # stats = [5,10,20, 0.1]
+    stats = [5,10,20, 0.2]
+    # stats = [5,10,20, 0.4]
+    # stats = [5,10,40, 0.2]
+    # stats = [5,10,40, 0.4]
+
 
     # noise_eval = True
     noise_eval = False
@@ -682,7 +691,7 @@ if __name__ == "__main__":
     # exp_types = ['context', 'embedding_one_layer_kmeans', 'L2RL_base', 'L2RL_context']
     # exp_types = ['context', 'embedding_LSTM_groundtruth', 'L2RL']
     # exp_types = ['context', 'embedding_LSTM_contrastive', 'L2RL']
-    exp_types = ['embedding_LSTM_contrastive']
+    # exp_types = ['embedding_LSTM_contrastive']
     # exp_types = ['embedding_LSTM_kmeans']
     # exp_types = ['embedding_LSTM_groundtruth']
     # exp_types = ['context', 'L2RL']
@@ -725,9 +734,9 @@ if __name__ == "__main__":
         # # # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Returns", use_lowess=False)
         # # # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Accuracy", use_lowess=False)
         # # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Embedder Loss")
-        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Loss")
-        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Pos Loss")
-        graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Neg Loss")
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Loss")
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Pos Loss")
+        # graph_with_lowess_smoothing(exp_base, exp_difficulty, "Contrastive Neg Loss")
 
         # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Returns', use_lowess=False)
         # # graph_with_lowess_smoothing(exp_base, exp_difficulty, 'Accuracy', use_lowess=False)

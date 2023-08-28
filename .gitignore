@@ -9,14 +9,6 @@ runs
 data
 old_tensorboards
 Promising_Models
+bayes_logs
 .vscode
 random_tests.py
-bayesian_opt.py
-contextual_choice_sl.py
-experiment_run.py
-embedding_model.py
-mem_recall_accuracy_test.py
-DND.py
-DNDLSTM.py
-logs_10a10b20s1h_1000_epochs_embedder_noisy_init_20_right.json
-logs_10a10b20s1h_1500_epochs_embedder_lstm_noisy_init_20_right.json
